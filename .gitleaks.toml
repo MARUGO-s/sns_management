@@ -1,5 +1,0 @@
-title = "LINE-management gitleaks config"
-
-[[allowlists]]
-description = "Historical Supabase anon JWT literals in one old migration commit"
-commits = ["0da3d1578c56b67f5a0f49e3abdacc6787677a9d"]

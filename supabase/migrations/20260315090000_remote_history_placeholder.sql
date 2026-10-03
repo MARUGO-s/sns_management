@@ -1,2 +1,0 @@
--- Placeholder migration fetched from remote history.
--- SQL body unknown in local repo; this file exists to align migration versions.
