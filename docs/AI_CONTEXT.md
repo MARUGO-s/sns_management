@@ -8,7 +8,7 @@ Generated from `knowledge/system-architecture.json` and the current Graphify gra
 - Repository: MARUGO-s/sns_management
 - Production: https://marugo-s.github.io/sns_management/
 - Graphify: 381 nodes / 422 relationships / 35 communities
-- Generated: 2026-10-03T19:25:19.944Z
+- Generated: 2026-10-03T19:37:16.516Z
 
 ## Required workflow
 1. Read `PROJECT_PROGRESS.md`, `AI_HANDOFF.md`, `docs/AI_KNOWLEDGE_SYSTEM.md`, and Obsidian `70_AI作業環境/00_AI_START_HERE.md`.

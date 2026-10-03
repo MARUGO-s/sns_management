@@ -2685,9 +2685,7 @@ export default function SocialConsole() {
             <section className="integration-editor-panel">
               <div className="panel-heading">
                 <div className="integration-title">
-                  <span className={`network-badge ${activeChannel.tone}`}>
-                    {activeChannel.label.slice(0, 2)}
-                  </span>
+                  <ChannelLogo channel={activeChannel.id} />
                   <div>
                     <p className="eyebrow">{activeChannel.label}</p>
                     <h3>API情報を登録</h3>
