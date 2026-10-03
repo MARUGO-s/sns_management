@@ -1,0 +1,8 @@
+public/system-map/**
+docs/**
+knowledge/**
+graphify-out/**
+dist/**
+.next/**
+.vinext/**
+.wrangler/**
