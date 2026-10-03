@@ -49,11 +49,20 @@ test("all channel selectors and administrator lists use shared image logos", asy
     readFile(new URL("../app/admin/admin-console.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
-  assert.doesNotMatch(consoleSource, /channel\.label\.slice/);
-  assert.equal((consoleSource.match(/<ChannelLogo\b/g) ?? []).length, 7);
+  assert.deepEqual(consoleSource.match(/\b\w+\.label\.slice\s*\(/g) ?? [], []);
+  assert.equal(/className=\{`network-badge\s/.test(consoleSource), false);
+  assert.equal((consoleSource.match(/<ChannelLogo\b/g) ?? []).length, 8);
   assert.equal((adminSource.match(/<ChannelLabel\b/g) ?? []).length, 2);
   assert.match(styles, /object-fit: contain/);
   assert.doesNotMatch(styles, /\.admin-channel-list span\b/);
+});
+
+test("API registration headings use the currently selected SNS logo", async () => {
+  const consoleSource = await readFile(new URL("../app/social-console.tsx", import.meta.url), "utf8");
+  assert.ok(
+    /className="integration-title"[\s\S]{0,200}<ChannelLogo channel=\{activeChannel\.id\}/.test(consoleSource),
+    "The API registration heading must render ChannelLogo with activeChannel.id",
+  );
 });
 
 test("provided logo files are preserved byte-for-byte", async () => {

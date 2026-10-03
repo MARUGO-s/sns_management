@@ -1312,3 +1312,13 @@ supabase functions deploy media-jobs --use-api
 - DB・設定変更: なし。gourmetの既存データ、SNSテーブル、認証、Storage、Edge Functions、Cloud Runは変更しない。認証済み本番画面の実データ操作は行わず、表示確認に本番個人データを使わない。
 - 知識: Graphify／Obsidianのコード構成（381ノード・422関係・35コミュニティ）と手書きSNSロゴノートを更新済み。`knowledge:check`成功。公開先は`https://marugo-s.github.io/sns_management/`。
 - Git・公開: `feat/provided-sns-logos`からPRでmainへ反映し、CIとPagesデプロイの成功・公開4画像の一致を確認する。
+
+### 2026-10-04 - API連携見出しに残った旧SNS略字ロゴを修正
+
+- 依頼: 「API情報を登録」のInstagram見出しに旧`In`ロゴが残っている。
+- 原因: 前回は一覧の`channel.label`を確認していたが、選択中のSNSを表示する`activeChannel.label.slice(0, 2)`が別の見出しに残存。以前の回帰テストも変数名`channel`に限定されており見逃した。
+- 修正: 見出しを`ChannelLogo channel={activeChannel.id}`へ統一。Instagram・TikTok・X・Threadsすべてで指定画像へ切り替わる。通常画面の共通ロゴ使用箇所は8箇所。
+- 回帰防止: 変数名を問わず`.label.slice()`と旧`network-badge`の直接描画を検出するガード、およびAPI見出しの選択SNS連動チェックを追加。修正前にテストが失敗し、修正後に成功することを確認。
+- 検証: `npm test` 20件成功、Lint・型検査成功。実際の見出しJSXを抽出したローカル専用表示（DB接続なし）でPCと390px幅を確認。4画像読み込み成功、モバイル横はみ出しなし。
+- DB・設定変更: なし。グルメ・SNSの既存データや認証・Storage・Edge Functions・Cloud Runを変更しない。
+- 知識・公開: Graphify索引と手書きSNSロゴノートを更新し、`fix/integration-heading-logo`からPR・CI・Pagesの通常手順で公開する。公開先は`https://marugo-s.github.io/sns_management/`。
