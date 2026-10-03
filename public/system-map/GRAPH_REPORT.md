@@ -4,12 +4,12 @@
 - cluster-only mode — file stats not available
 
 ## Summary
-- 376 nodes · 412 edges · 34 communities (27 shown, 7 thin omitted)
+- 381 nodes · 422 edges · 35 communities (28 shown, 7 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 1 edges (avg confidence: 0.5)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `e22c4d49`
+- Built from commit: `c232162a`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -54,9 +54,9 @@
 5. `SocialConsole()` - 7 edges
 6. `createTimelinePlan()` - 6 edges
 7. `MediaEditor()` - 6 edges
-8. `AdminConsole()` - 6 edges
-9. `public.social_workspaces` - 6 edges
-10. `exclude` - 6 edges
+8. `public.social_workspaces` - 6 edges
+9. `exclude` - 6 edges
+10. `AdminConsole()` - 6 edges
 
 ## Surprising Connections (you probably didn't know these)
 - None detected - all connections are within the same source files.
@@ -64,19 +64,19 @@
 ## Import Cycles
 - None detected.
 
-## Communities (34 total, 7 thin omitted)
+## Communities (35 total, 7 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.05
-Nodes (30): ApiStatus, channelById, ChannelId, channels, clearAuthCallbackParams(), createDefaultIntegrations(), createIntegration(), DbPostRow (+22 more)
+Nodes (34): ChannelId, ChannelLabel(), ChannelLogo(), channelLogos, appPath(), ApiStatus, channelById, channels (+26 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.08
-Nodes (26): AccessState, actionLabels, AdminConsole(), AdminPager(), AdminUserRow, AdminView, adminViews, AuditRow (+18 more)
-
-### Community 2 - "Community 2"
 Cohesion: 0.06
 Nodes (31): @cloudflare/vite-plugin, eslint, eslint-config-next, devDependencies, @cloudflare/vite-plugin, eslint, eslint-config-next, react-server-dom-webpack (+23 more)
+
+### Community 2 - "Community 2"
+Cohesion: 0.09
+Nodes (25): AccessState, actionLabels, AdminConsole(), AdminPager(), AdminUserRow, AdminView, adminViews, AuditRow (+17 more)
 
 ### Community 3 - "Community 3"
 Cohesion: 0.15
@@ -170,17 +170,17 @@ Nodes (3): imports, @supabase/functions-js, @supabase/server
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `devDependencies` connect `Community 2` to `Community 5`?**
-  _High betweenness centrality (0.022) - this node is a cross-community bridge._
+- **Why does `devDependencies` connect `Community 1` to `Community 5`?**
+  _High betweenness centrality (0.021) - this node is a cross-community bridge._
 - **Why does `dependencies` connect `Community 9` to `Community 5`?**
-  _High betweenness centrality (0.012) - this node is a cross-community bridge._
+  _High betweenness centrality (0.011) - this node is a cross-community bridge._
 - **What connects `config`, `refresh-system-map.sh script`, `geistSans` to the rest of the system?**
   _192 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
-  _Cohesion score 0.05391120507399577 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05061224489795919 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
-  _Cohesion score 0.08172043010752689 - nodes in this community are weakly interconnected._
-- **Should `Community 2` be split into smaller, more focused modules?**
   _Cohesion score 0.06451612903225806 - nodes in this community are weakly interconnected._
+- **Should `Community 2` be split into smaller, more focused modules?**
+  _Cohesion score 0.08620689655172414 - nodes in this community are weakly interconnected._
 - **Should `Community 3` be split into smaller, more focused modules?**
   _Cohesion score 0.14666666666666667 - nodes in this community are weakly interconnected._

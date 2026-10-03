@@ -1302,3 +1302,13 @@ supabase functions deploy media-jobs --use-api
 - デプロイ: `main`へpushしてGitHub ActionsによるGitHub Pages公開を開始する。
 - 未完了事項: 公開URLでのブラウザ表示確認。
 - 次の作業: GitHub Actions完了後にログイン画面を再読み込みして注釈を確認する。
+
+### 2026-10-04 - 利用者指定のSNSロゴ画像を反映
+
+- 依頼: 添付されたInstagram・TikTok・X・Threadsの画像を、それぞれのSNSロゴとして使用する。
+- 実施内容: 4ファイルを加工せず`public/logos/`へ保存。`app/channel-logo.tsx`に共通部品を追加し、通常画面の接続アカウント・投稿先・連携設定・登録状況・予約・履歴・履歴詳細と、管理画面の投稿一覧・予約予定へ反映。SNS名とボタンのアクセシブルなラベルは維持。
+- 公開パス: ロゴ参照は`appPath()`を使用し、ローカルの`/logos/`とGitHub Pagesの`/sns_management/logos/`に対応。元画像の縦横比と白い余白を`object-fit: contain`で保持。
+- 検証: `npm test` 19件成功、Lint成功、`tsc --noEmit`成功。追加3テストで共通部品のSSR、ローカル／PagesのURL、既知／未知のSNS名、全表示箇所、4画像のSHA-256によるバイト一致を確認。本番と同じ部品・ビルド済みCSSを使用するローカル専用表示でPCと390px幅を確認し、全画像読み込み成功・モバイルの横はみ出しなし。
+- DB・設定変更: なし。gourmetの既存データ、SNSテーブル、認証、Storage、Edge Functions、Cloud Runは変更しない。認証済み本番画面の実データ操作は行わず、表示確認に本番個人データを使わない。
+- 知識: Graphify／Obsidianのコード構成（381ノード・422関係・35コミュニティ）と手書きSNSロゴノートを更新済み。`knowledge:check`成功。公開先は`https://marugo-s.github.io/sns_management/`。
+- Git・公開: `feat/provided-sns-logos`からPRでmainへ反映し、CIとPagesデプロイの成功・公開4画像の一致を確認する。

@@ -54,8 +54,8 @@ import MediaEditor, {
   type MediaCropConfig,
 } from "./media-editor";
 import VideoViewer from "./video-viewer";
+import { ChannelLogo, type ChannelId } from "./channel-logo";
 
-type ChannelId = "instagram" | "tiktok" | "x" | "threads";
 type ViewId =
   | "compose"
   | "calendar"
@@ -1902,9 +1902,7 @@ export default function SocialConsole() {
                 setActiveView("settings");
               }}
             >
-              <span className={`network-badge ${channel.tone}`}>
-                {channel.label.slice(0, 2)}
-              </span>
+              <ChannelLogo channel={channel.id} />
               <span>
                 <strong>{channel.label}</strong>
                 <small>API設定</small>
@@ -2157,9 +2155,7 @@ export default function SocialConsole() {
                     onClick={() => toggleChannel(channel.id)}
                     aria-pressed={selectedChannels.includes(channel.id)}
                   >
-                    <span className={`network-badge ${channel.tone}`}>
-                      {channel.label.slice(0, 2)}
-                    </span>
+                    <ChannelLogo channel={channel.id} />
                     <span>
                       <strong>{channel.label}</strong>
                       <small>{integrations[channel.id].status}</small>
@@ -2265,6 +2261,7 @@ export default function SocialConsole() {
                               className={`mini-badge ${channelById[channelId].tone}`}
                               key={`${post.id}-${channelId}`}
                             >
+                              <ChannelLogo channel={channelId} small />
                               {channelById[channelId].label}
                             </span>
                           ))}
@@ -2361,6 +2358,7 @@ export default function SocialConsole() {
                               className={`mini-badge ${channelById[channelId].tone}`}
                               key={`${record.id}-${channelId}`}
                             >
+                              <ChannelLogo channel={channelId} small />
                               {channelById[channelId].label}
                             </span>
                           ))}
@@ -2406,6 +2404,7 @@ export default function SocialConsole() {
                         className={`mini-badge ${channelById[channelId].tone}`}
                         key={`detail-${selectedHistory.id}-${channelId}`}
                       >
+                        <ChannelLogo channel={channelId} small />
                         {channelById[channelId].label}
                       </span>
                     ))}
@@ -2667,9 +2666,7 @@ export default function SocialConsole() {
                     onClick={() => setActiveIntegrationId(channel.id)}
                     aria-pressed={activeIntegrationId === channel.id}
                   >
-                    <span className={`network-badge ${channel.tone}`}>
-                      {channel.label.slice(0, 2)}
-                    </span>
+                    <ChannelLogo channel={channel.id} />
                     <span>
                       <strong>{channel.label}</strong>
                       <small>{integrations[channel.id].updatedAt}</small>
@@ -2929,9 +2926,7 @@ export default function SocialConsole() {
               </div>
               {channels.map((channel) => (
                 <div className="summary-row" key={`summary-${channel.id}`}>
-                  <span className={`network-badge ${channel.tone}`}>
-                    {channel.label.slice(0, 2)}
-                  </span>
+                  <ChannelLogo channel={channel.id} />
                   <div>
                     <strong>{channel.label}</strong>
                     <small>{integrations[channel.id].status}</small>

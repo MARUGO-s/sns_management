@@ -27,6 +27,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { appPath } from "../lib/public-path";
+import { ChannelLabel } from "../channel-logo";
 
 type AdminView =
   | "posts"
@@ -1175,7 +1176,9 @@ export default function AdminConsole() {
                       <td>
                         <div className="admin-channel-list">
                           {(post.social_post_channels ?? []).map((item) => (
-                            <span key={item.channel}>{item.channel}</span>
+                            <span key={item.channel}>
+                              <ChannelLabel channel={item.channel} />
+                            </span>
                           ))}
                         </div>
                       </td>
@@ -1261,7 +1264,9 @@ export default function AdminConsole() {
                       <td>
                         <div className="admin-channel-list">
                           {(post.social_post_channels ?? []).map((item) => (
-                            <span key={item.channel}>{item.channel}</span>
+                            <span key={item.channel}>
+                              <ChannelLabel channel={item.channel} />
+                            </span>
                           ))}
                         </div>
                       </td>
