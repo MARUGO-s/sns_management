@@ -268,6 +268,27 @@ h4 {
   min-width: 34px;
 }
 
+.network-badge.channel-logo {
+  background: #fff;
+  flex-shrink: 0;
+  overflow: hidden;
+  width: 34px;
+}
+
+.channel-logo img {
+  display: block;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.network-badge.channel-logo--small {
+  border-radius: 4px;
+  height: 24px;
+  min-width: 24px;
+  width: 24px;
+}
+
 .network-badge.pink,
 .mini-badge.pink {
   background: var(--pink);
@@ -1353,6 +1374,11 @@ input:focus {
   font-size: 0.72rem;
   font-weight: 800;
   padding: 5px 8px;
+}
+
+.mini-badge {
+  align-items: center;
+  gap: 4px;
 }
 
 .status-pill {
@@ -2637,7 +2663,7 @@ input:focus {
   gap: 4px;
 }
 
-.admin-channel-list span,
+.admin-channel-list > span,
 .admin-action {
   border-radius: 999px;
   display: inline-flex;
@@ -2646,9 +2672,11 @@ input:focus {
   padding: 4px 7px;
 }
 
-.admin-channel-list span {
+.admin-channel-list > span {
+  align-items: center;
   background: #eef2f7;
   color: #475569;
+  gap: 4px;
 }
 
 .admin-status {
