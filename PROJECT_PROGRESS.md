@@ -14,6 +14,7 @@
 - Cloud RunはGoogle認証が `invalid_grant` で未接続。旧動画workerを別DBへ誤接続しない。
 - SNSへの実投稿・DM/分析取得は移植前と同様に未実装。初期管理者は所有者指定後に付与。
 - Docker worker検証に成功（9テスト、実MP4のクロップ・途中カット・音声なし編集）。既存の他アプリ用コンテナは変更せず。
+- 移植PR: https://github.com/MARUGO-s/sns_management/pull/3 。CIの設定未投入時は管理者画面がRestrictedを表示する正常動作にSSR回帰テストを対応。
 - 以下は過去の経緯。古い接続先や手順は最新状態より優先しない。
 
 ## 文書情報

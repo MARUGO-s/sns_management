@@ -39,7 +39,7 @@ test("server-renders the protected administrator route", async () => {
   assert.equal(response.status, 200);
 
   const html = await response.text();
-  assert.match(html, /管理コンソール/);
+  assert.match(html, /管理コンソール|管理者専用ページ/);
   assert.match(html, /管理者権限を確認しています|管理者専用ページ/);
 });
 
