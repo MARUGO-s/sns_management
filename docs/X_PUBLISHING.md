@@ -2,13 +2,56 @@
 
 ## 範囲と現状
 
-2026-10-04 20:14 JST、文章・画像・動画の手動投稿をローカル実装・検証済み。
-限定migrationと投稿／OAuth Functionsは本番公開済み。フロントは通常のPR・CI・Pages公開待ち。
+2026-10-04 20:37 JST、文章・画像・動画の手動投稿コード、限定migration／Functions、
+GitHub Pages画面の公開と読み取り専用確認を完了。
+メディア用5スコープ設定は別承認後に保存済みだが、20:44:36 JST時点で未接続。
+設定保存で旧接続を無効化するため、現在の接続済み・画像動画利用可能を主張しない。
 本番反映と最終検証結果は`PROJECT_PROGRESS.md`の最新記録を正本とする。
 予約保存は既存機能のまま。予約日時に自動投稿するスケジューラは追加しない。
 実投稿、実メディアアップロード、有料APIを使うテストは行わない。
 
 公開先: https://marugo-s.github.io/sns_management/
+
+### 2026-10-04 20:44 JSTのメディア設定（現在の接続状態）
+
+利用者の20:37:55 JSTの別承認後、20:43:03 JSTに5スコープ
+`tweet.read tweet.write users.read offline.access media.write`を保存し、保存通知を確認。
+Callbackと認証情報は維持、秘密情報欄は空。設定保存は旧接続を無効化する。
+認可画面の対象・権限を確認して1回だけ認可操作したが、アプリ復帰・Callback・
+新トークン保存は未確認。設定保存済みを再接続済み・メディア投稿可能と扱わない。
+20:44:36 JSTの新しいアプリタブは「API設定 要確認」、保存済み5スコープと空の秘密情報欄、
+接続成功表示なし。現在は設定保存済み・未接続で、文章・メディアとも再接続完了が必要。
+認可画面で再クリック・reloadはせず、利用者の再試行判断を待つ。
+証跡: 作業場所の`../reports/qa/x-manual-publication/media-reauth.txt`。
+実投稿・実アップロード・追加Providerテスト・
+支払い設定・バックエンド変更なし。以下の4スコープ記録は20:37 JST時点の履歴。
+
+### 2026-10-04 20:37 JSTの公開確認（公開状態と当時の接続記録）
+
+- PR #12 https://github.com/MARUGO-s/sns_management/pull/12 の最終head
+  `dda2c8a4e2f4c7aad364d6a96b8d4ce1734c0e96`はCI
+  https://github.com/MARUGO-s/sns_management/actions/runs/37198676592 成功後、
+  20:29 JSTに通常のsquashでmain `225c73282ebaeaec618aa5580b2c384462515522`へ反映。
+  同SHAのPages https://github.com/MARUGO-s/sns_management/actions/runs/37198925360
+  成功を20:32 JSTに確認。並行GoogleログインPR #11の変更を保持。
+- 新しい認証済みタブで、即時投稿UI・X加重文字数0/280・上限／費用注意と空の確認無効を確認。
+  元の作成欄と未保存入力は保持。保存済みX接続記録・4スコープ・固定Callback・秘密情報欄が空、
+  メディア権限不足の警告を確認。X側の本人やトークン有効性を照会した検証ではない。
+- 添付後の確認無効化は合成fixtureで検証。本番では添付・preview・保存・送信・OAuth・更新なし。
+  Googleボタンは認証済み画面では安全に確認できず、ログアウトや新規認証は行わない。
+  証跡: 作業場所の`../reports/qa/x-manual-publication/live-published.txt`。
+- バックエンドは加算migration `20261004110000_social_x_publications.sql`を1回適用済み。
+  `social-x-publish` v1/JWT必須、`social-x-oauth` v2/JWT必須、
+  `social-x-oauth-callback` v2/JWT不要のみ公開済み。再適用しない。
+  非SNS構造6種・既存Storage trigger2件・無関係Functions6件は不変、
+  権限メタデータ8件と未認証401を確認。本番データテストなし。
+- 統合後のNode47件、投稿Deno31件、OAuth Deno17件、UI24件、型検査、
+  隔離DB／競合、Googleフラグ付きPagesビルドと知識検査が成功。
+  独立安全性・不具合再レビューに阻害なし。索引再生成と118ファイルのソースミラー一致も確認済み。
+- 実Provider受理・実投稿・実アップロード・本番トークン更新は未検証。
+  メディア権限は20:37:55 JSTの別承認後に保存済みだが、20:44 JSTの再認可は未完了。
+  実投稿は別操作。費用ゼロを保証しない。
+  以下の20:10 JSTの未完了記録は当時の履歴で、本節を優先する。
 
 ### 初期版の制限
 
@@ -121,7 +164,7 @@ Provider通信はすべてモック。DBテストは使い捨てPostgreSQLのみ
 テストに本番トークン・投稿本文・添付・カード情報を渡さない。
 独立した安全性・不具合レビューを行い、UIは合成データでPC・モバイルを確認する。
 
-### 2026-10-04 20:10 JSTの検証記録
+### 2026-10-04 20:10 JSTの検証記録（当時の履歴）
 
 - Node回帰42件、OAuth Deno17件、独立DBの共有境界・投稿・OAuthと
   複数接続競合テスト、GitHub Pages向け静的ビルドは成功。
