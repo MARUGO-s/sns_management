@@ -1,6 +1,6 @@
 # Instatic TalksX 進行記録
 
-## 2026-10-04 X OAuth接続機能（ローカル実装・検証済み、未公開）
+## 2026-10-04 X OAuth接続機能（バックエンド反映済み、Pages・本人認可待ち）
 
 - ブランチ: `feat/x-oauth-pkce`。開始HEAD: `02117d430a168eb7ab2546e9dcb8af1c22d2ff71`。
 - Xの投稿権限を含むOAuth 2.0 S256 PKCE、サーバー側のstate管理とトークン更新を実装。
@@ -8,13 +8,15 @@
 - 既存のSNS設定変更は実際の所有者・所属を要求し、管理者の閲覧権限と分離する。
 - 最終検証: build、30 Node回帰テスト、16 Denoテスト、3 Edge Functionの型検査、TypeScript、Lint、独立DBの共有境界・OAuth・複数接続競合テストが成功。Pages静的ビルドと1440px／390pxの合成画面確認も成功。
 - 設計・本番適用前提: `docs/X_OAUTH.md`。
-- 本番DB、Edge Functions、Pagesへ本変更は未反映。X側は読み書き（DM・メールなし）、機密Webクライアント、固定Callback・Websiteを保存し再表示確認済み。生成された認証情報は平文を表示・出力せずEnergy Vaultへ保管。
+- 2026-10-04 15:54 JST時点で、共有Supabase `ycsqfajidusuibqljjwr`へ加算migration `20261004070000_social_x_oauth.sql`だけを適用し、`social-x-oauth`、`social-x-oauth-callback`、更新された`social-integration-secrets`を公開済み。Pagesとアプリ側認証情報は未反映。X側は読み書き（DM・メールなし）、機密Webクライアント、固定Callback・Websiteを保存し再表示確認済み。認証情報は平文を表示・出力せずEnergy Vaultへ保管。
+- 非SNSの`public`／`auth`について、列・制約・ポリシー・grants・関数・RLSの6種の構造fingerprintが適用前後で一致。既存グルメ・共通Authの構造を変更していない。
 - 投稿処理は未実装で、テスト投稿もしない。本人のOAuth認可とアプリへのトークン保存は未実施。
 - 共有DBの`db push/reset`、共通Auth変更、既存グルメやCloud Runへの変更は禁止。
 - 利用者は課金なしのX開発者登録を承認。送信担当が承認済み登録の完了を確認した。登録後に既定のアプリを表示し、アプリの新規作成・支払い・クレジット購入・自動チャージ設定は行っていない。
 - XプロジェクトはPay Per Use。利用条件・必要クレジットが未確定のため、課金しない指定に従い本番のAPI呼び出しと最終OAuth検証は保留。
 - 公式料金ではUser Read $0.01／リソースを確認。本人識別APIが無料とは確認できていない。GitHubはMARUGO-sの管理権限とCLI認証を確認済み。SupabaseのhCaptchaは解決し、共有gourmetプロジェクトの所有者アクセス・CLI認証・対象プロジェクトへのlinkを確認済み。
-- 2026-10-04 15:47 JSTに知識更新を完了。手書きObsidianのX OAuth設計ノート、Graphify、環境図、AI入口を更新し、`knowledge:check`で索引の鮮度・統計・秘密値ガードに合格。コミット・push・PR・ソースミラー同期と本番反映はこの記録時点では未実施。
+- 実装commit: `4fb332d50391863bcc217069ac2fb0a1d8eb6e1f`。PR #8 https://github.com/MARUGO-s/sns_management/pull/8 のコードcommitに対するCIは成功。マージとPages公開は保留中。
+- 2026-10-04 15:47 JSTに知識更新を完了し、`knowledge:check`で索引の鮮度・統計・秘密値ガードに合格。commit `4fb332d`のGit管理102ファイルを許可済みソースミラーへ同期し、全内容一致・競合0・削除0を確認済み。以降の本番反映記録は文書のみの変更で、追加commitとミラー同期はまだ行っていない。
 
 ## 2026-10-04 SNS管理リポジトリ移植（最新状態）
 
@@ -1389,3 +1391,13 @@ supabase functions deploy media-jobs --use-api
 - アクセス: GitHubのMARUGO-s管理権限・CLI認証、Supabaseの共有gourmet本番プロジェクト所有者アクセス・CLI認証・正確な対象へのlinkを担当者が確認。hCaptcha待ちは解消済み。
 - 本番・Git: この記録時点でOAuth migration、Functions、Pages、アプリ認証情報は未反映。commit・push・PRとソースミラー同期は未実施。本担当はアプリソースや本番を変更しない。
 - 次: 生成物を含めてfeature branchへcommitし、その後にGit管理ツリーだけを許可済みソースミラーへ同期する。限定migration／Functions、通常PR・CI・Pagesを順に反映。費用条件が承認されるまで本番OAuth・X API・テスト投稿は実行しない。
+
+### 2026-10-04 15:54 JST - X OAuthバックエンドを限定反映、フロント公開と認可は未完了
+
+- 実施: 担当者が共有Supabase `ycsqfajidusuibqljjwr`へ正確な加算migration `20261004070000_social_x_oauth.sql`を個別適用。新規`social-x-oauth`・`social-x-oauth-callback`と更新された`social-integration-secrets`を公開した。
+- 境界確認: 非SNSの`public`／`auth`に対する列・制約・ポリシー・grants・関数・RLSの6種の構造fingerprintは前後一致。共有プロジェクトへの`db push/reset`や本番データを用いるDBテストは行わず、他アプリの構造変更をしない。
+- Git・CI: `feat/x-oauth-pkce`の実装commit `4fb332d50391863bcc217069ac2fb0a1d8eb6e1f`を保存。PR #8 https://github.com/MARUGO-s/sns_management/pull/8 でコードcommitのCI成功を確認。マージ・Pagesはまだ未完了。
+- Dropbox: `4fb332d`のGit管理102ファイルを同期済み。35更新・67既存一致、競合0・削除0、`PROJECT_PROGRESS.md`の116,278 bytesが完全一致。ミラー独自ファイルは変更・削除せず、秘密情報・依存・build・索引作業出力は同期対象にしない。
+- 記録変更: `PROJECT_PROGRESS.md`、`AI_HANDOFF.md`、`docs/X_OAUTH.md`と手書きObsidianのX OAuth設計ノートへ、バックエンド公開済みと未完了のフロント・アプリ設定・本人認可を分けて記録。コードと生成知識は変更しない。この追加文書変更のcommit／同期は保留。
+- 未完了: PRマージ・Pages公開、Vaultからのアプリ設定、費用条件の利用者確認、本人OAuth認可と接続状態確認。アプリ認証情報の保存もX API通信も実施していない。投稿公開機能は本変更の範囲外。
+- 次: 文書更新の確認後に通常のPR・Pages手順を完了。課金なし指定に従い、費用が発生し得るプロバイダー呼び出しは承認まで実行しない。テスト投稿はしない。

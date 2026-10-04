@@ -1,6 +1,6 @@
 # Instatic TalksX Handoff
 
-## 2026-10-04 X OAuth local implementation verified, rollout pending
+## 2026-10-04 X OAuth backend deployed, frontend/configuration/authorization pending
 
 Local branch: `feat/x-oauth-pkce`, based on `02117d430a168eb7ab2546e9dcb8af1c22d2ff71`.
 OAuth 2.0 S256 PKCE support is implemented in the X integration UI and SNS-only
@@ -13,9 +13,14 @@ The layout check used exact-width iframes because native browser resizing did no
 change the reported viewport. SSR effects and authenticated submissions were not
 exercised. No live provider call was made.
 
-No migration, function, frontend, or app-side credential configuration has been
-deployed by this work. X developer registration and provider OAuth configuration
-are complete: read/write without DM/email, confidential web client, fixed callback
+As of 2026-10-04 15:54 JST, the exact additive migration
+`20261004070000_social_x_oauth.sql`, `social-x-oauth`,
+`social-x-oauth-callback`, and the updated `social-integration-secrets` are
+deployed to `ycsqfajidusuibqljjwr`. All six non-SNS public/auth schema fingerprints
+(columns, constraints, policies, grants, functions, RLS) match before and after.
+The frontend and app-side credential configuration remain pending.
+X developer registration and provider OAuth configuration are complete:
+read/write without DM/email, confidential web client, fixed callback
 and production website URL. Newly generated client credentials were transferred
 directly into Energy Vault, not files, chat, or logs. Do not claim a connected account until production rollout and the
 owner's OAuth grant are verified. Actual publishing/scheduling remains outside
@@ -33,11 +38,12 @@ The official pricing page lists User Read at $0.01/resource (checked 2026-10-04)
 this does not prove the final `users/me` request is free. See the source links
 in `docs/X_OAUTH.md`.
 
-Migration `20261004070000_social_x_oauth.sql` is additive and unapplied. It adds
+Migration `20261004070000_social_x_oauth.sql` is additive and applied. It adds
 SNS-only configs/state, transaction-scoped membership guards, configuration/token
 revision binding, refresh CAS/receipt persistence, and atomic legacy secrets
-mutation. Deploy this exact migration and the two X Edge Functions plus the
-updated `social-integration-secrets`; never db push/reset the shared project.
+mutation. The exact migration, two X Edge Functions, and updated
+`social-integration-secrets` are deployed; do not repeat deployment blindly,
+and never db push/reset the shared project.
 Unchanged configuration saves preserve a working connection. Expired tokens
 report `needsRefresh`, stale configuration reports `needsReview`. Refresh retries
 identical persistence without repeating provider exchange; process/provider/DB
@@ -47,26 +53,33 @@ GitHub browser/CLI sign-in as MARUGO-s and repository administration were
 verified. Supabase hCaptcha is resolved: the browser worker verified owner access
 to the line_management organization's gourmet project, main PRODUCTION branch;
 CLI authentication and exact linking to `ycsqfajidusuibqljjwr` were also verified.
-This access verification is not proof that the OAuth migration/functions are
-deployed.
+The backend deployment above was separately verified by the deployment owner;
+access verification alone is not proof of rollout.
 
 Knowledge closure completed at 2026-10-04 15:47 JST. The authorized manual
 Obsidian design note `20_設計/X OAuth接続.md` and its architecture link now record
-the decisions, verification, undeployed state, shared-project boundaries, and
+the decisions, verification, rollout state, shared-project boundaries, and
 no-charge restriction. `npm run knowledge:update` regenerated code-only
 Graphify, public maps, runtime views, `docs/AI_CONTEXT.md`, and Obsidian outputs:
 494 nodes, 638 edges, 46 communities; consistency and vault secret-marker checks
 passed. `.npmrc` was automatically excluded as potentially sensitive. No LLM
-extraction tokens were used. The feature branch is still uncommitted/unpushed at
-this entry, and the source mirror has not been synchronized. Commit the generated
-outputs first, then sync only Git-managed files with the established exclusions.
+extraction tokens were used. Implementation commit
+`4fb332d50391863bcc217069ac2fb0a1d8eb6e1f` is on `feat/x-oauth-pkce`;
+PR #8 https://github.com/MARUGO-s/sns_management/pull/8 passed CI for that code
+commit. Merge and Pages publishing are pending. The committed 102-file tree was
+synchronized to the authorized source mirror with 35 updates, 67 existing
+matches, zero conflicts/deletions, and exact progress-file agreement.
+The 15:54 JST rollout-status documentation changes have not yet been committed
+or resynchronized. No code or knowledge regeneration is needed for these
+documentation-only changes.
 
 ## 2026-10-04 migration override
 
 Authoritative repository: `MARUGO-s/sns_management`; production: `https://marugo-s.github.io/sns_management/`.
 Database: shared gourmet project `ycsqfajidusuibqljjwr`, not the old SNS or deleted SMS project.
 SNS tables/functions/storage are namespaced. Do not db push/reset the shared project.
-The bootstrap is the only current migration; it retains the prior SNS SQL with shared-project safeguards.
+The bootstrap retains the prior SNS SQL with shared-project safeguards.
+The additive X OAuth migration `20261004070000_social_x_oauth.sql` is now also applied.
 Existing gourmet schema/policies/functions were compared and are unchanged.
 SNS enrollment is explicit; browser sessions and logout are app-local, but Auth identities/keys/capacity are shared.
 Cloud Run for this target is not connected because the Google credential expired. Configure an SNS-only job

@@ -2,9 +2,17 @@
 
 ## 状態と範囲
 
-2026-10-04時点ではローカル実装・検証中。本番反映や利用者によるX認可は未完了。
+2026-10-04 15:54 JST時点ではローカル実装・検証と限定バックエンド反映が完了。
+加算migration `20261004070000_social_x_oauth.sql`、`social-x-oauth`、
+`social-x-oauth-callback`、更新された`social-integration-secrets`は公開済み。
+フロントエンドのPRマージ・Pages公開、アプリ側設定の保存、本人のX認可は未完了。
 現在の公開先は https://marugo-s.github.io/sns_management/ 、共有Supabaseプロジェクトは
 `ycsqfajidusuibqljjwr`。古いSNS/SMSプロジェクトの設定を流用しない。
+
+実装commitは `4fb332d50391863bcc217069ac2fb0a1d8eb6e1f`。
+PR #8 https://github.com/MARUGO-s/sns_management/pull/8 のコードcommitはCI成功。
+非SNSの`public`／`auth`について列・制約・ポリシー・grants・関数・RLSの6種の
+構造fingerprintがバックエンド適用前後で一致している。
 
 今回の機能はXのOAuth認可、接続情報の保管と更新まで。
 投稿の公開、予約投稿の実行、DM、コメント、分析、Webhookは追加しない。
@@ -91,11 +99,13 @@ CallbackはアプリのJWTを持たないため、ランダムなstateによっ�
 ## 本番反映の前提
 
 機能・テスト・変更内容の確認後に、以下を個別に反映する。
+2026-10-04 15:54 JST時点でバックエンド3項目は反映済み。
+本番状態を確認せず再適用しない。Pages公開だけはまだ未完了。
 
-- OAuth用の加算migrationだけを対象に適用。
-- `social-x-oauth`、`social-x-oauth-callback`と必要な共有ヘルパー。
-- 所属確認を強化した`social-integration-secrets`。
-- 通常のPR、CI、GitHub Pagesの公開手順でフロントエンドを反映。
+- 反映済み: OAuth用の正確な加算migration `20261004070000_social_x_oauth.sql`だけを対象に適用。
+- 反映済み: `social-x-oauth`、`social-x-oauth-callback`と必要な共有ヘルパー。
+- 反映済み: 所属確認を強化した`social-integration-secrets`。
+- 未完了: 通常のPR、CI、GitHub Pagesの公開手順でフロントエンドを反映。
 
 **共有プロジェクトへ`db push`や`db reset`をしない。**
 既存のグルメテーブル、Authプロバイダー、共通の認証設定、Cloud Run、
