@@ -1,6 +1,6 @@
 # Instatic TalksX Handoff
 
-## 2026-10-04 X OAuth backend deployed, frontend/configuration/authorization pending
+## 2026-10-04 X OAuth deployed/configured, authorization held under no-charge rule
 
 Local branch: `feat/x-oauth-pkce`, based on `02117d430a168eb7ab2546e9dcb8af1c22d2ff71`.
 OAuth 2.0 S256 PKCE support is implemented in the X integration UI and SNS-only
@@ -10,20 +10,30 @@ regressions, 16 mocked Deno tests, three Edge Function type checks, TypeScript,
 lint, isolated shared DB/OAuth assertions, and real multi-connection race tests.
 Static GitHub Pages build and synthetic desktop/mobile layout verification passed.
 The layout check used exact-width iframes because native browser resizing did not
-change the reported viewport. SSR effects and authenticated submissions were not
-exercised. No live provider call was made.
+change the reported viewport. SSR effects were not exercised. Production
+configuration submission and reload were subsequently verified at 16:05 JST;
+production OAuth authorization, callback, and provider exchange remain untested.
+No live provider call was made.
 
 As of 2026-10-04 15:54 JST, the exact additive migration
 `20261004070000_social_x_oauth.sql`, `social-x-oauth`,
 `social-x-oauth-callback`, and the updated `social-integration-secrets` are
 deployed to `ycsqfajidusuibqljjwr`. All six non-SNS public/auth schema fingerprints
 (columns, constraints, policies, grants, functions, RLS) match before and after.
-The frontend and app-side credential configuration remain pending.
+PR #8's final head `0cdefc22af5b46073d67a4d136b756cd37921c38` passed CI and was
+squash-merged at 16:02 JST as `6f07ef8dc14703557285b9380fc924d16c6197fc`.
+GitHub Pages run https://github.com/MARUGO-s/sns_management/actions/runs/37184605009
+completed successfully for that merge SHA. At 16:05 JST, the live authenticated
+app saved Client ID and secret via protected Vault fill. Reload showed an empty
+secret field with `保存済み（変更時のみ入力）`, the correct fixed callback, scopes
+`tweet.read tweet.write users.read offline.access`, and no manual X token fields.
+Current status is `設定保存済み・未接続（要確認）`, not connected.
 X developer registration and provider OAuth configuration are complete:
 read/write without DM/email, confidential web client, fixed callback
 and production website URL. Newly generated client credentials were transferred
-directly into Energy Vault, not files, chat, or logs. Do not claim a connected account until production rollout and the
-owner's OAuth grant are verified. Actual publishing/scheduling remains outside
+directly into Energy Vault, then securely filled in the app, not files, chat, or
+logs. Do not claim a connected account until the owner's OAuth grant and verified
+token persistence are completed. Actual publishing/scheduling remains outside
 this change. Do not send a test post.
 
 The user authorized access to this app's Dropbox knowledge folder and source
@@ -34,9 +44,13 @@ redirect. The console displayed a default developer app under a Pay Per Use
 project. No app creation, payment, credits purchase, or automatic top-up was
 performed by a worker. Provider API calls remain blocked until any possible
 charges are clarified and authorized.
-The official pricing page lists User Read at $0.01/resource (checked 2026-10-04);
-this does not prove the final `users/me` request is free. See the source links
-in `docs/X_OAUTH.md`.
+The live console showed balance/free credits/current spend all $0 and no card.
+Its $20 free-credit offer requires first card registration. The final cost and
+credit requirements for the identity endpoint are not verified; neither zero
+balance nor an offer establishes free API use. Do not start OAuth, grant access,
+invoke the callback, exchange tokens, call X APIs, register a card, purchase
+credits, enable auto-top-up, or post under the current no-charge instruction.
+See the source links in `docs/X_OAUTH.md`.
 
 Migration `20261004070000_social_x_oauth.sql` is additive and applied. It adds
 SNS-only configs/state, transaction-scoped membership guards, configuration/token
@@ -44,6 +58,9 @@ revision binding, refresh CAS/receipt persistence, and atomic legacy secrets
 mutation. The exact migration, two X Edge Functions, and updated
 `social-integration-secrets` are deployed; do not repeat deployment blindly,
 and never db push/reset the shared project.
+Unrelated Functions are unchanged. Production secret-table RLS, table access and
+function execute permissions deny `anon`/`authenticated`; unauthenticated requests
+to JWT-required Functions returned 401.
 Unchanged configuration saves preserve a working connection. Expired tokens
 report `needsRefresh`, stale configuration reports `needsReview`. Refresh retries
 identical persistence without repeating provider exchange; process/provider/DB
@@ -65,13 +82,21 @@ Graphify, public maps, runtime views, `docs/AI_CONTEXT.md`, and Obsidian outputs
 passed. `.npmrc` was automatically excluded as potentially sensitive. No LLM
 extraction tokens were used. Implementation commit
 `4fb332d50391863bcc217069ac2fb0a1d8eb6e1f` is on `feat/x-oauth-pkce`;
-PR #8 https://github.com/MARUGO-s/sns_management/pull/8 passed CI for that code
-commit. Merge and Pages publishing are pending. The committed 102-file tree was
-synchronized to the authorized source mirror with 35 updates, 67 existing
-matches, zero conflicts/deletions, and exact progress-file agreement.
-The 15:54 JST rollout-status documentation changes have not yet been committed
-or resynchronized. No code or knowledge regeneration is needed for these
-documentation-only changes.
+PR #8 https://github.com/MARUGO-s/sns_management/pull/8 is now merged and Pages
+published as recorded above. The earlier 102-file implementation tree was
+synchronized with 35 updates, 67 matches, zero conflicts/deletions.
+Final rollout documentation uses `docs/x-oauth-rollout-complete`, a docs-only
+branch from merge SHA `6f07ef8`. Submit it through normal PR/CI, never direct main
+push. Manual Obsidian X/architecture notes were updated with zero concurrency
+conflicts. Knowledge checks, the two knowledge-model Node regressions and diff
+whitespace checks passed. The authorized source mirror matched all 102 tracked
+files at closure commit `cb2fc93`: three document updates, 99 matches, zero
+conflicts/deletions, exact progress-file agreement. Final log additions are
+resynchronized using the same baseline/concurrency guards while preserving
+unrelated edits and excluding secrets, dependencies, builds and index outputs.
+No code or knowledge regeneration is needed for documentation-only
+changes. The unresolved user choice is hold the configured connection or inspect
+free-credit conditions; neither choice authorizes card registration. No test post.
 
 ## 2026-10-04 migration override
 
