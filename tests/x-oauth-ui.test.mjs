@@ -44,7 +44,7 @@ test("callback cleanup preserves Supabase auth parameters and fragment without t
   assert.equal(helpers.parseXOAuthCallback("https://app.example/?social_x_oauth=posted").callback, null);
   assert.equal(helpers.parseXOAuthCallback("https://app.example/?code=login-code#provider").hasCallbackParams, false);
   assert.doesNotMatch(helpers.xOAuthFailureMessage("constructor"), /function|Object/);
-  assert.match(helpers.xOAuthCallbackMessage({ status: "success", error: "" }), /自動公開機能はまだ有効になりません/);
+  assert.match(helpers.xOAuthCallbackMessage({ status: "success", error: "" }), /予約の自動公開は未実装/);
 });
 
 test("authorization URLs accept only exact HTTPS X OAuth endpoint", () => {

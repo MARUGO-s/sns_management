@@ -4,7 +4,7 @@ export type XOAuthCallback = {
 };
 
 const xOAuthErrors: Record<string, string> = {
-  invalid_request: "Client IDとScopesの入力を確認してください。Scopesはtweet.read、tweet.write、users.read、offline.accessを指定します。",
+  invalid_request: "Client IDとScopesの入力を確認してください。基本権限はtweet.read、tweet.write、users.read、offline.accessです。画像・動画にはmedia.writeも必要です。",
   forbidden: "このワークスペースのX連携を変更する権限がありません。",
   not_connected: "Xの許可がまだ完了していません。「Xに連携」から許可してください。",
   busy: "X連携の別の処理が実行中です。少し待ってからもう一度お試しください。",
@@ -53,7 +53,7 @@ export function parseXOAuthCallback(href: string): {
 
 export function xOAuthCallbackMessage(callback: XOAuthCallback) {
   if (callback.status === "success") {
-    return "Xの連携許可が完了しました。投稿・自動公開機能はまだ有効になりません。";
+    return "Xの連携許可が完了しました。手動投稿は確認画面から実行できます。予約の自動公開は未実装です。";
   }
   if (callback.status === "denied") return xOAuthErrors.access_denied;
   return xOAuthFailureMessage(callback.error);

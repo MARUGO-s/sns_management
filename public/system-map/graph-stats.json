@@ -1,8 +1,8 @@
 {
-  "nodes": 494,
-  "edges": 638,
-  "communities": 46,
-  "builtAtCommit": "02117d430a168eb7ab2546e9dcb8af1c22d2ff71",
-  "generatedAt": "2026-10-04T06:46:51.964Z",
+  "nodes": 624,
+  "edges": 863,
+  "communities": 53,
+  "builtAtCommit": "640b09688068c833baca56dc620b51e03785be2a",
+  "generatedAt": "2026-10-04T11:11:58.457Z",
   "modelVersion": 1
 }

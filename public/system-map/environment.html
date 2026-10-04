@@ -43,9 +43,9 @@
         <p class="summary">実行環境と、AIがGraphify・Obsidianを使って探索・実装・検証・知識保存する循環を、同じ構造モデルから生成しています。</p>
       </div>
       <div class="stats">
-        <span class="stat">494 Graphify nodes</span>
-        <span class="stat">638 relationships</span>
-        <span class="stat">46 communities</span>
+        <span class="stat">624 Graphify nodes</span>
+        <span class="stat">863 relationships</span>
+        <span class="stat">53 communities</span>
         <span class="stat">generated 2026-10-04</span>
       </div>
     </header>
@@ -54,7 +54,7 @@
     </nav>
 
       <section class="diagram-panel is-active" data-diagram-panel="runtime">
-        <svg viewBox="0 0 1440 1150" role="img"
+        <svg viewBox="0 0 1440 1430" role="img"
     aria-labelledby="runtime-title runtime-desc"
     xmlns="http://www.w3.org/2000/svg">
     <title id="runtime-title">アプリ実行・デプロイ環境</title>
@@ -92,7 +92,7 @@
         markerWidth="7" markerHeight="7" orient="auto-start-reverse">
         <path d="M 0 0 L 10 5 L 0 10 z" fill="#fdba74" />
       </marker></defs>
-    <rect width="1440" height="1150" fill="#07111f" />
+    <rect width="1440" height="1430" fill="#07111f" />
     <text x="40" y="42" fill="#f8fafc" font-size="25" font-weight="850">アプリ実行・デプロイ環境</text>
     <text x="40" y="66" fill="#94a3b8" font-size="13">利用者のブラウザからSupabase、Cloud Run、GitHub Pagesまでの実行時・配信経路。</text>
 
@@ -302,6 +302,42 @@
             rx="7" fill="#0f172a" fill-opacity=".92" />
           <text x="708" y="659" text-anchor="middle"
             fill="#dbeafe" font-size="12" font-weight="650">固定ルートへ安全な結果だけ</text>
+        </g>
+        <g class="edge edge-auth">
+          <line x1="395" y1="434" x2="1020" y2="1120"
+            stroke="#67e8f9"
+            stroke-width="2.2" marker-end="url(#arrow-auth)" />
+          <rect x="637.5" y="765" width="140" height="24"
+            rx="7" fill="#0f172a" fill-opacity=".92" />
+          <text x="707.5" y="781" text-anchor="middle"
+            fill="#dbeafe" font-size="12" font-weight="650">確認済み手動投稿 / 安全な状態取得</text>
+        </g>
+        <g class="edge edge-data">
+          <line x1="1020" y1="1126" x2="715" y2="420"
+            stroke="#86efac"
+            stroke-width="2.2" marker-end="url(#arrow-data)" />
+          <rect x="797.5" y="761" width="140" height="24"
+            rx="7" fill="#0f172a" fill-opacity=".92" />
+          <text x="867.5" y="777" text-anchor="middle"
+            fill="#dbeafe" font-size="12" font-weight="650">所属・不変snapshot・単回dispatch・receipt</text>
+        </g>
+        <g class="edge edge-data">
+          <line x1="1020" y1="1126" x2="700" y2="630"
+            stroke="#86efac"
+            stroke-width="2.2" marker-end="url(#arrow-data)" />
+          <rect x="790" y="866" width="140" height="24"
+            rx="7" fill="#0f172a" fill-opacity=".92" />
+          <text x="860" y="882" text-anchor="middle"
+            fill="#dbeafe" font-size="12" font-weight="650">元ファイルだけの検証済みdownload</text>
+        </g>
+        <g class="edge edge-secret">
+          <line x1="1144" y1="1220" x2="1180" y2="940"
+            stroke="#fca5a5"
+            stroke-width="2.2" marker-end="url(#arrow-secret)" />
+          <rect x="1092" y="1068" width="140" height="24"
+            rx="7" fill="#0f172a" fill-opacity=".92" />
+          <text x="1162" y="1084" text-anchor="middle"
+            fill="#dbeafe" font-size="12" font-weight="650">メディアupload / 処理確認 / POST一回</text>
         </g>
 
         <g class="node" data-node-id="operator">
@@ -540,7 +576,7 @@
             width="204" height="92">
             <div xmlns="http://www.w3.org/1999/xhtml"
               style="color:#aebbd0;font:12px/1.35 system-ui;text-align:center;overflow:hidden">
-              X OAuth 2.0 S256 PKCE。所属認可、stateの単回取得、サーバー側トークン保存・更新。ローカル実装、本番未反映。
+              X OAuth 2.0 S256 PKCE。所属認可、state単回取得、サーバー側トークン保存・更新。本番接続を確認済み。
             </div>
           </foreignObject>
         </g>
@@ -555,7 +591,22 @@
             width="184" height="72">
             <div xmlns="http://www.w3.org/1999/xhtml"
               style="color:#aebbd0;font:12px/1.35 system-ui;text-align:center;overflow:hidden">
-              本人の認可・ユーザー識別・トークン更新。投稿の実行処理は未実装。
+              本人の認可、ユーザー識別、トークン更新、明示的な手動投稿とメディア処理。実投稿は別途利用者確認。
+            </div>
+          </foreignObject>
+        </g>
+        <g class="node" data-node-id="x_publish_edge">
+          <rect x="900" y="1130" width="240" height="180"
+            rx="14" fill="#111827" stroke="#10b981" stroke-width="2.5" />
+          <rect x="900" y="1130" width="8" height="180"
+            rx="4" fill="#10b981" />
+          <text x="1020" y="1151" text-anchor="middle"
+            fill="#f8fafc" font-size="15" font-weight="800"><tspan x="1020" dy="0">Edge Function</tspan><tspan x="1020" dy="20">social-x-publish</tspan></text>
+          <foreignObject x="918" y="1188"
+            width="204" height="112">
+            <div xmlns="http://www.w3.org/1999/xhtml"
+              style="color:#aebbd0;font:12px/1.35 system-ui;text-align:center;overflow:hidden">
+              Xだけに手動投稿。確認済み本文・元ファイルSHA-256・送信先の固定、公開試行の排他制御、動画処理待ち、結果不明時の再送防止。実投稿検証は別途、予約の自動公開は未実装。
             </div>
           </foreignObject>
         </g>

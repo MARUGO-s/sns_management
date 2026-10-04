@@ -7,8 +7,8 @@ Generated from `knowledge/system-architecture.json` and the current Graphify gra
 - Working directory: `/Users/yoshito/Documents/Codex/2026-10-04/new-chat/work/sns-management-migration`
 - Repository: MARUGO-s/sns_management
 - Production: https://marugo-s.github.io/sns_management/
-- Graphify: 494 nodes / 638 relationships / 46 communities
-- Generated: 2026-10-04T06:46:51.964Z
+- Graphify: 624 nodes / 863 relationships / 53 communities
+- Generated: 2026-10-04T11:11:58.457Z
 
 ## Required workflow
 1. Read `PROJECT_PROGRESS.md`, `AI_HANDOFF.md`, `docs/AI_KNOWLEDGE_SYSTEM.md`, and Obsidian `70_AI作業環境/00_AI_START_HERE.md`.

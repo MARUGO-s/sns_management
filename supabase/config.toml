@@ -441,3 +441,9 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/social-x-oauth-callback/deno.json"
 entrypoint = "./functions/social-x-oauth-callback/index.ts"
+
+[functions.social-x-publish]
+enabled = true
+verify_jwt = true
+import_map = "./functions/social-x-publish/deno.json"
+entrypoint = "./functions/social-x-publish/index.ts"

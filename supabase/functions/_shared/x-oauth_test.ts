@@ -34,6 +34,30 @@ const tokens = {
   expires_in: 7200,
   scope: "tweet.read tweet.write users.read offline.access",
 };
+Deno.test("media authorization is opt-in and legacy text scopes remain valid", async () => {
+  const base = "tweet.read tweet.write users.read offline.access";
+  const media = `${base} media.write`;
+  assert(normalizeScopes(base) === base);
+  assert(normalizeScopes(media) === media);
+  assert(normalizeScopes("") === base);
+  const input = {
+    appId: "synthetic-client", clientSecret: "synthetic-secret",
+    refreshToken: "synthetic-refresh", scopes: media,
+  };
+  await rejects(
+    () => exchangeToken(input, async () => response(tokens)),
+    "invalid_token",
+  );
+  const result = await exchangeToken(input, async () =>
+    response({ ...tokens, scope: media })
+  );
+  assert(result.accessToken === tokens.access_token);
+  const legacy = await exchangeToken({ ...input, scopes: base }, async () =>
+    response(tokens)
+  );
+  assert(legacy.accessToken === tokens.access_token);
+  await rejects(() => normalizeScopes(`${base} dm.read`), "invalid_request");
+});
 Deno.test("PKCE S256 matches RFC7636 known challenge and high entropy nonce", async () => {
   assert(
     await challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk") ===
@@ -94,12 +118,12 @@ Deno.test("callback result never contains code, state, provider error or token",
 Deno.test("confidential code exchange uses Basic and fixed protocol fields", async () => {
   const fake: typeof fetch = async (url, init) => {
     assert(url === "https://api.x.com/2/oauth2/token");
-    const headers = init?.headers as Record<string, string>;
+    const headers = (init as RequestInit | undefined)?.headers as Record<string, string>;
     assert(headers.Authorization === "Basic " + btoa("client:mock-secret"));
-    const body = init?.body as URLSearchParams;
+    const body = (init as RequestInit | undefined)?.body as URLSearchParams;
     assert(body.get("code_verifier") === "verifier");
     assert(!body.has("client_id"));
-    assert(init?.redirect === "error");
+    assert((init as RequestInit | undefined)?.redirect === "error");
     return response(tokens);
   };
   const result = await exchangeToken(
@@ -119,7 +143,7 @@ Deno.test("confidential code exchange uses Basic and fixed protocol fields", asy
 });
 Deno.test("public refresh supplies client_id and retains refresh token if not rotated", async () => {
   const fake: typeof fetch = async (_url, init) => {
-    const body = init?.body as URLSearchParams;
+    const body = (init as RequestInit | undefined)?.body as URLSearchParams;
     assert(body.get("client_id") === "public-client");
     assert(body.get("grant_type") === "refresh_token");
     return response({ ...tokens, refresh_token: undefined });
@@ -183,7 +207,7 @@ Deno.test("users/me verifies safe identity only", async () => {
   const result = await verifyIdentity("mock-access", async (url, init) => {
     assert(url === "https://api.x.com/2/users/me");
     assert(
-      (init?.headers as Record<string, string>).Authorization ===
+      ((init as RequestInit | undefined)?.headers as Record<string, string>).Authorization ===
         "Bearer mock-access",
     );
     return response({

@@ -13,7 +13,7 @@
       "title": "アプリ実行・デプロイ環境",
       "description": "利用者のブラウザからSupabase、Cloud Run、GitHub Pagesまでの実行時・配信経路。",
       "width": 1440,
-      "height": 1150
+      "height": 1430
     },
     {
       "id": "knowledge",
@@ -337,7 +337,7 @@
       "view": "runtime",
       "label": "Edge Functions\nsocial-x-oauth / callback",
       "group": "edge",
-      "description": "X OAuth 2.0 S256 PKCE。所属認可、stateの単回取得、サーバー側トークン保存・更新。ローカル実装、本番未反映。",
+      "description": "X OAuth 2.0 S256 PKCE。所属認可、state単回取得、サーバー側トークン保存・更新。本番接続を確認済み。",
       "x": 900,
       "y": 870,
       "width": 240,
@@ -348,11 +348,22 @@
       "view": "runtime",
       "label": "X OAuth 2.0 / API",
       "group": "provider",
-      "description": "本人の認可・ユーザー識別・トークン更新。投稿の実行処理は未実装。",
+      "description": "本人の認可、ユーザー識別、トークン更新、明示的な手動投稿とメディア処理。実投稿は別途利用者確認。",
       "x": 1190,
       "y": 870,
       "width": 220,
       "height": 140
+    },
+    {
+      "id": "x_publish_edge",
+      "view": "runtime",
+      "label": "Edge Function\nsocial-x-publish",
+      "group": "edge",
+      "description": "Xだけに手動投稿。確認済み本文・元ファイルSHA-256・送信先の固定、公開試行の排他制御、動画処理待ち、結果不明時の再送防止。実投稿検証は別途、予約の自動公開は未実装。",
+      "x": 900,
+      "y": 1130,
+      "width": 240,
+      "height": 180
     }
   ],
   "edges": [
@@ -656,6 +667,34 @@
       "to": "browser_app",
       "label": "固定ルートへ安全な結果だけ",
       "kind": "auth"
+    },
+    {
+      "view": "runtime",
+      "from": "browser_app",
+      "to": "x_publish_edge",
+      "label": "確認済み手動投稿 / 安全な状態取得",
+      "kind": "auth"
+    },
+    {
+      "view": "runtime",
+      "from": "x_publish_edge",
+      "to": "supabase_db",
+      "label": "所属・不変snapshot・単回dispatch・receipt",
+      "kind": "data"
+    },
+    {
+      "view": "runtime",
+      "from": "x_publish_edge",
+      "to": "supabase_storage",
+      "label": "元ファイルだけの検証済みdownload",
+      "kind": "data"
+    },
+    {
+      "view": "runtime",
+      "from": "x_publish_edge",
+      "to": "x_provider",
+      "label": "メディアupload / 処理確認 / POST一回",
+      "kind": "secret"
     }
   ],
   "sourcePriority": [
