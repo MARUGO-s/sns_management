@@ -9,6 +9,18 @@
 - 認証開始エンドポイントは302でGoogleへ転送し、対象クライアント・gourmetのCallbackと一致、要求scopeはemail/profileと確認。秘密値・stateは記録しない。32 Node回帰テスト・型検査・Lint・知識整合検査が成功。
 - 以下のGoogle無効という記録は移植時の履歴であり、現在状態は本節を優先する。
 
+## 2026-10-04 20:10 JST X手動投稿のローカル検証完了（本番反映完了は未確認）
+
+- 依頼: Xへの投稿機能を進め、文章・画像・動画を対象にする。ブランチは`feat/x-manual-publishing`、開始HEADは`640b09688068c833baca56dc620b51e03785be2a`。commit・PR・投稿機能の本番反映はこの記録時点で未実施。
+- ローカル実装: 確認画面付き手動投稿、JWT必須`social-x-publish`、SNS専用加算migration、公開履歴、動画処理待ちの明示的続行。予約保存は維持し、予約の自動公開は実装しない。他SNSの公開成功を記録しない。
+- 確認固定: 生本文、順序付き元ファイルID・パス・MIME・サイズ・SHA-256、DBのみから取得する対象接続fingerprintを準備時に比較。初回アップロード前は全元ファイルを検証し終えるまで更新・アップロードを呼ばない。初回prepareの既知ロールバックだけを未開始の証明とし、通信失敗・後の履歴不在を根拠に別requestIdで再送しない。
+- 上限: 必須本文はX加重280文字、JPEG／PNG各5MiB・4枚まで、MP4 20MiB・1本、画像動画混在不可。元ファイルのみ。X側の全プラン上限・エンコード受理を保証しない。
+- 権限: 既存4スコープ接続は維持。メディア用`media.write`は利用者の別判断による設定保存と再認可が必要で、自動変更しない。実投稿・実アップロード・再認可・支払い設定変更は行わない。
+- 検証済み: Node初回全42件、OAuth Deno17件、独立DBの共有境界・投稿・OAuth・複数接続競合、Pages静的ビルド。投稿Denoモック最終31件（Provider16・制御15）、UI組合せ24件が成功。独立安全性の最終重点レビューは阻害指摘なし。
+- 画面: 正確な1440×1000／390×844で横はみ出しなし、確認ダイアログ中央配置・架空接続名・メディア権限不足の確認無効化を確認。実コンポーネントのhydrationとpreview-onlyモックで、preview中の編集無効化、取消し→編集→再確認、ローカルfile digest／freeze経路を確認。最終投稿・Storage保存／アップロード・OAuthは実行しない。実Provider・本番永続化は未検証。証跡は作業場所の`../reports/qa/x-manual-publication/follow-up.txt`。
+- 次: 手書き知識と索引更新、通常PR・CI、正確なheadのsquash、限定バックエンド・Pages反映、許可済みソースミラー同期。限定migration適用は結果待ちで完了を主張しない。新migrationは`20261004110000_social_x_publications.sql`、Functionsは`social-x-publish`と追加スコープ対応の2 OAuth Functionsのみ。共有DBの`db push/reset`・共通Auth・他アプリ・Cloud Runは変更しない。契約・一次資料: `docs/X_PUBLISHING.md`。
+- 本節はローカル実装の到達点。以下の19:01 JST記録は本番の既存接続状態であり、接続済みを投稿機能の公開済み・実通信検証済みとは扱わない。
+
 ## 2026-10-04 19:01 JST X OAuth本人認可・接続確認完了（現在状態）
 
 - 利用者が18:59 JSTに無料APIクレジットを使うX接続を承認し、19:01 JSTに1回のOAuth認可を完了。認可画面で利用者所有のXアカウントと読み書き・継続更新の権限を確認し、DM・メールは要求しない。
@@ -133,6 +145,9 @@
 この更新を行っていない作業は、コードが動いていても引き継ぎ未完了として扱う。次のAIは、前回作業の記録漏れを発見した場合、確認できる事実だけを追記してから新しい作業を始める。
 
 ## 現在の到達点
+
+2026-10-04 20:10 JSTのX手動投稿はローカル検証を完了し、本番反映完了は未確認。
+既存OAuth接続とは分け、詳細と未完了事項は文書先頭および`docs/X_PUBLISHING.md`を優先する。
 
 Instatic TalksXは、Instagram、TikTok、X、Threadsの運用情報を一括管理する業務用Webアプリとして、以下の基盤まで本番反映済み。
 
@@ -811,6 +826,12 @@ Supabase Advisorsは`Leaked Password Protection Disabled`を1件報告してい�
 
 ## 既知の警告と環境上の注意
 
+### X手動投稿の未完了事項
+
+- 投稿の最終モック・重点安全性再レビュー・合成画面再確認は完了。知識索引再生成・PR／CIと本番反映完了の確認が未完了。
+- 画像・動画には`media.write`の追加再認可が必要。現在の4スコープ接続を自動変更しない。
+- Providerテストはモックのみ。実投稿・実アップロード・本番更新の成功を確認済みとはしない。API費用ゼロは保証しない。
+
 ### Supabase Advisors
 
 - `Leaked Password Protection Disabled`が1件
@@ -849,7 +870,7 @@ Supabase Advisorsは`Leaked Password Protection Disabled`を1件報告してい�
 
 - X以外のSNSのOAuth認可開始・Callback処理（Xは2026-10-04に実装・本番認可確認済み）
 - X以外のSNSのAccess Token更新（Xの更新実装は検証済み、本番更新は未検証）
-- 実際の投稿公開
+- X手動投稿の本番反映・実Provider検証（ローカル初期実装中）。X以外の実際の投稿公開
 - 各SNS APIへの処理済み動画アップロード
 - 公開結果の取得
 - 公開失敗時の再試行
@@ -891,6 +912,10 @@ Supabase Advisorsは`Leaked Password Protection Disabled`を1件報告してい�
 - 管理者による安全な論理削除
 
 ## 次に着手する優先順位
+
+2026-10-04の優先事項は、X手動投稿の知識更新後の通常PR／CI・限定公開結果確認。
+追加再認可と実投稿は別の利用者判断を待つ。
+以下の旧Cloud Run等の優先順位は今回の依頼を上書きしない。
 
 ### 優先度1: Cloud Run動画処理の完了確認
 
@@ -1447,3 +1472,37 @@ supabase functions deploy media-jobs --use-api
 - 検証・Git: `knowledge:check`と`git diff --check`で文書・索引・秘密値ガードを検証し、`docs/x-oauth-live-connection`から通常の文書PR・CIへ提出する。mainへの直接pushは行わない。構造変更がなく索引再生成や本番通信を伴う追加検証は不要。
 - Dropbox: 許可済み手書き2ノートとGit管理ソースミラーを、競合検出と既知commit内容の比較で同期。無関係の編集は保持し、`.git`・`.env*`・依存・build・索引作業出力は同期しない。
 - 未完了・次: 投稿公開・予約自動実行は未実装。本番の期限切れ・更新・再認可は未検証。新しいAPI・公開処理は利用者の次の指示と費用判断を待ち、接続確認だけのために投稿や追加実通信をしない。
+
+### 2026-10-04 20:04 JST - X手動投稿の初期実装を記録（本番未反映）
+
+- 依頼: 文章・画像・動画のX手動投稿。確認スナップショット、元ファイル全件ハッシュ、接続fingerprint、重複抑止、結果不明ロック、動画の明示的続行を記録。予約自動公開は対象外。
+- 変更: `app/lib/x-posting.ts`、運用画面・CSS、投稿Function／共有ヘルパー／加算migration、Node／Deno／SQL競合テスト、CI・依存、構成モデルと`docs/X_PUBLISHING.md`。文書担当はこの記録・`AI_HANDOFF.md`・投稿設計文書と許可済み手書きノートのみを編集。
+- 検証: Node42件、OAuth Deno17件、独立DB・OAuth競合、Pages静的ビルドは成功。投稿モック31件の最終再実行、回復処理の独立再レビュー、修正後の合成SSR画面確認は未完了。実Provider通信・投稿・アップロード・追加再認可なし。
+- DB・公開: 本番変更なし。新migration・投稿Functionと変更OAuth Functionsは未反映。既存OAuth migrationを再適用せず、共有DB・Auth・他アプリ・Cloud Runを変更しない。
+- Git・知識: `feat/x-manual-publishing`、開始HEAD `640b09688068c833baca56dc620b51e03785be2a`、commit／PR未実施。構造変更に伴う索引再生成とソースミラー同期は親担当が最終確認後に実施する。秘密値・投稿本文・個人識別・金融詳細は記録しない。
+- 次: 最終検証・再レビュー、知識更新、通常PR・CIと正確なhead指定のsquash、限定本番反映。メディア追加再認可・実投稿は利用者の別判断を待つ。
+
+### 2026-10-04 20:10 JST - X手動投稿の最終モック・重点レビュー・合成画面確認
+
+- 投稿Denoモック31件（Provider16・制御15）、OAuth Deno17件、UI組合せ24件が成功。初回全42 Node・独立DB／OAuth競合・Pagesビルドの成功に加え、独立安全性の最終重点レビューは阻害指摘なし。
+- 合成画面再確認は1440×1000／390×844で横はみ出しなし。中央ダイアログ、架空接続名、メディア権限不足時の確認無効化を確認。実コンポーネントのhydrationでpreview待機中の編集無効化、取消し・再編集・再確認、ローカルfile digest／freezeから確認画面への到達を確認。
+- 範囲: preview-onlyモックを使用。最終投稿・Storage保存／アップロード・OAuthはクリックしない。外部通信と最終操作はモック側でも拒否。正確なReact state内digest値、本番永続化、実Provider受理は未検証。証跡: 作業場所の`../reports/qa/x-manual-publication/follow-up.txt`。
+- 記録変更: 投稿設計文書・進行記録・引き継ぎと許可済み手書き2ノート。限定migration適用は担当者の結果待ち。本番適用済みと断定せず、親担当が知識更新・PR・限定公開の正確な結果を追記する。
+
+
+### 2026-10-04 20:14 JST - X手動投稿の限定バックエンド公開と最終検証
+
+- 反映: 正確な追加migration `20261004110000_social_x_publications.sql`を重複防止・timeout付き単一トランザクションで適用。6種の非SNS構造fingerprintと既存Storageトリガー2件の定義・ACL fingerprintは一致。SNS用Storage fenceのみ追加し、8件の権限メタデータ確認に合格。本番データによる書込テストなし。
+- Functions: `social-x-publish` v1/JWT必須、`social-x-oauth` v2/JWT必須、`social-x-oauth-callback` v2/JWT不要だけを公開。無関係な6 Functionsは全メタデータ一致。投稿・OAuthの未認証要求は401。
+- 検証: 最終Node45件、投稿Denoモック31件、OAuth17件、UI関連24件、型検査、Lint（既存hook警告1件のみ）、共有DB・OAuth・投稿の隔離DB／競合、Pages静的ビルドに成功。安全性／不具合の重点再レビューで阻害なし。依存auditは既存28件から増加なし、一括依存更新なし。
+- 画面: 1440×1000／390×844で中央確認画面、対象アカウントの合成表示、横はみ出しなし、メディア権限不足時の確認無効化。hydrated実コンポーネントをpreviewのみのモックで動かし、確認中入力禁止、取消し後の編集・再確認、合成元ファイルのdigest／freeze到達を確認。最終送信・アップロード・永続化の実UI操作は未検証。
+- 境界: 実X通信・投稿・アップロード・更新・再認可・購入・支払い／自動チャージ変更はなし。既存4権限の接続を保持。画像・動画の`media.write`追加再認可は利用者の別判断。予約自動公開は未実装。
+- 知識・Git: コード限定Graphify、構成図、Obsidianの索引・手書き設計を更新し、`knowledge:check`と`git diff --check`成功。feature branchから通常PR・CI・正確なhead指定squash・Pagesを進める。フロント公開とソース控えの同期は本記録時点で保留。
+
+
+### 2026-10-04 20:23 JST - 並行Google公開変更を保持してPRを統合
+
+- 追加確認: PR #12作成後にmainのGoogleログイン公開PR #11が進んでいたと判明。Pagesの公開フラグ、Google文書・テスト、両方の進行／引き継ぎ履歴を保持して取り込む。Xの実行コードとSQLは不変、バックエンド再適用なし。
+- 競合: 自動生成の構成図・索引は統合ソースから再生成。ソース控えの9差分は新しい正規main `08e7dc7`と完全一致し、独自編集ではないことを確認。削除・一方の変更への巻き戻し・強制pushなし。
+- 再検証: Node47件、投稿モック31件、Function型チェック、TypeScript、Lint（既存警告のみ）、Googleの本番フラグを有効にしたPagesビルド成功。知識整合と差分確認後、更新PRのCI・通常マージ・Pagesを継続する。
+- PR: https://github.com/MARUGO-s/sns_management/pull/12 。フロント公開・ソース控え同期は本記録時点で保留。実X投稿／メディアアップロード／再認可は引き続き別判断。

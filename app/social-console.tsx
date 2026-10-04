@@ -62,6 +62,13 @@ import VideoViewer from "./video-viewer";
 import { ChannelLogo, type ChannelId } from "./channel-logo";
 import { filterPosts, scheduledPosts, type PostFilter, type PostStatus } from "./lib/post-list";
 import {
+  freezeXMediaFile, parseXConnectionPreview, parseXNotStartedFailure, parseXPublishResult, reconcileXAttempts,
+  removeXOptimisticAttempt, removeXPendingRequest,
+  validateXPost, xAttemptLocksPost, xAttemptProjection, xMediaDigest,
+  xPostLink, xPublishBody, xPublishErrorMessage, xPublishMessage, xPublishStateLabel,
+  type XExpectedFile, type XPublicationAttempt, type XPublishExpected, type XPublishResult,
+} from "./lib/x-posting";
+import {
   getXOAuthCallbackUrl,
   hasUnsavedComposer,
   integrationInputReady,
@@ -241,6 +248,18 @@ type HistoryRecord = {
   files: SavedFile[];
 };
 
+type XPublishConfirmation = {
+  workspaceId: string;
+  body: string;
+  files: Array<LocalAttachment | SavedFile>;
+  channels: ChannelId[];
+  postId?: string;
+  requestId: string;
+  resume: boolean;
+  expected: XPublishExpected;
+  username?: string;
+};
+
 type SecretFlags = {
   clientSecret: boolean;
   accessToken: boolean;
@@ -278,6 +297,7 @@ type DbPostRow = {
     content_type: string;
     storage_path: string;
     media_variant: "original" | "processed";
+    created_at: string;
   }> | null;
 };
 
@@ -302,7 +322,7 @@ const channels: Array<{
 const defaultScopes: Record<ChannelId, string> = {
   instagram: "content_publish, instagram_manage_comments, instagram_basic",
   tiktok: "video.publish, user.info.basic, comment.list",
-  x: "tweet.read, tweet.write, users.read, offline.access",
+  x: "tweet.read tweet.write users.read offline.access media.write",
   threads: "threads_basic, threads_content_publish, threads_manage_replies",
 };
 
@@ -438,6 +458,16 @@ export default function SocialConsole() {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [canPublishX, setCanPublishX] = useState(false);
+  const [xAttempts, setXAttempts] = useState<Record<string, XPublicationAttempt>>({});
+  const [xAttemptsLoaded, setXAttemptsLoaded] = useState(false);
+  const [xNextChecks, setXNextChecks] = useState<Record<string, string>>({});
+  const [xCheckTime, setXCheckTime] = useState(0);
+  const [xPublishingId, setXPublishingId] = useState<string | null>(null);
+  const xPublishBusy = useRef(false);
+  const [xConfirmation, setXConfirmation] = useState<XPublishConfirmation | null>(null);
+  const xConfirmationRef = useRef<HTMLDialogElement>(null);
+  const xComposerValidation = validateXPost(postText, attachedFiles);
   const [stores, setStores] = useState<StoreRow[]>([]);
   const [currentStore, setCurrentStore] = useState<StoreRow | null>(null);
   const [selectedStoreId, setSelectedStoreId] = useState("");
@@ -510,6 +540,19 @@ export default function SocialConsole() {
   const [historyFilter, setHistoryFilter] = useState<PostFilter>("all");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  useEffect(() => {
+    if (xConfirmation) xConfirmationRef.current?.showModal();
+    else xConfirmationRef.current?.close();
+  }, [xConfirmation]);
+
+  useEffect(() => {
+    const waitingUntil = Object.values(xNextChecks).map(Date.parse).filter((time) => time > Date.now());
+    if (!waitingUntil.length) return;
+    // Local countdown only. Never poll X or automatically continue publication.
+    const timer = window.setTimeout(() => setXCheckTime(Date.now()), Math.min(...waitingUntil) - Date.now() + 20);
+    return () => window.clearTimeout(timer);
+  }, [xNextChecks, xCheckTime]);
+
   function openView(view: ViewId, filter: PostFilter = "all") {
     setActiveView(view);
     setSearchQuery("");
@@ -539,6 +582,10 @@ export default function SocialConsole() {
         videoRequestId.current += 1;
         setIsAdmin(false);
         setWorkspaceId(null);
+        setCanPublishX(false);
+        setXAttempts({});
+        setXAttemptsLoaded(false);
+        setXConfirmation(null);
         setCurrentStore(null);
         setStoreSelectionRequired(false);
         setHistory([]);
@@ -557,6 +604,10 @@ export default function SocialConsole() {
         videoRequestId.current += 1;
         setIsAdmin(false);
         setWorkspaceId(null);
+        setCanPublishX(false);
+        setXAttempts({});
+        setXAttemptsLoaded(false);
+        setXConfirmation(null);
         setCurrentStore(null);
         setStoreSelectionRequired(false);
         setHistory([]);
@@ -728,9 +779,285 @@ export default function SocialConsole() {
     ];
   }, [history]);
 
+  // Only identifiers are retained locally. No text, file bytes, or credentials.
+  // A lost response without a server row must not become a fresh send on reload.
+  function xUncertainKey(id: string) { return `instatic-talksx:x-publish-pending:${id}`; }
+  function readXUncertain(id: string): Array<{ postId: string; requestId: string }> {
+    try {
+      const saved: unknown = JSON.parse(localStorage.getItem(xUncertainKey(id)) ?? "[]");
+      return Array.isArray(saved) ? saved.filter((value) =>
+        value && typeof value.postId === "string" && typeof value.requestId === "string",
+      ).slice(-100) : [];
+    } catch { return []; }
+  }
+  function rememberXUncertain(id: string, postId: string, requestId: string, keep: boolean) {
+    try {
+      const pending = readXUncertain(id);
+      const saved = keep ? pending.filter((item) => item.postId !== postId) : removeXPendingRequest(pending, postId, requestId);
+      if (keep) saved.push({ postId, requestId });
+      localStorage.setItem(xUncertainKey(id), JSON.stringify(saved.slice(-100)));
+    } catch { /* Server-side attempt locking remains authoritative. */ }
+  }
+  async function loadXAttempts(id: string) {
+    if (!supabase) return;
+    const { data, error } = await supabase.from("social_x_publication_attempts")
+      .select(xAttemptProjection).eq("workspace_id", id)
+      .order("created_at", { ascending: false });
+    if (error) {
+      setXAttemptsLoaded(false);
+      return;
+    }
+    const pending = readXUncertain(id);
+    const next = reconcileXAttempts((data ?? []) as unknown as XPublicationAttempt[], pending, id);
+    for (const item of pending) {
+      if (next[item.postId]?.state === "published" ||
+          (next[item.postId]?.request_id === item.requestId && next[item.postId]?.state === "rejected")) {
+        rememberXUncertain(id, item.postId, item.requestId, false);
+      }
+    }
+    setXAttempts(next);
+    setXAttemptsLoaded(true);
+  }
+  function applyXResult(id: string, postId: string, result: XPublishResult) {
+    setXCheckTime(Date.now());
+    setXNextChecks((current) => {
+      const next = { ...current };
+      if (result.state === "preparing" && result.nextCheckAt) next[postId] = result.nextCheckAt;
+      else delete next[postId];
+      return next;
+    });
+    rememberXUncertain(id, postId, result.requestId, !["published", "rejected"].includes(result.state));
+    setXAttempts((current) => ({
+      ...current,
+      [postId]: {
+        id: result.attemptId, post_id: postId, workspace_id: id, request_id: result.requestId,
+        state: result.state, remote_post_id: result.remotePostId ?? null,
+        error_code: result.errorCode ?? null, created_at: current[postId]?.created_at ?? new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    }));
+  }
+  async function invokeXPublish(id: string, postId: string, requestId: string, fileIds: string[], expected: XPublishExpected) {
+    if (!supabase) return { result: null, failureMessage: "", notStarted: false };
+    rememberXUncertain(id, postId, requestId, true);
+    applyXResult(id, postId, { state: "unknown", attemptId: "", requestId });
+    try {
+      const { data, error } = await supabase.functions.invoke("social-x-publish", {
+        body: xPublishBody(postId, requestId, fileIds, expected),
+      });
+      const result = parseXPublishResult(data);
+      if (error || !result || result.requestId !== requestId) {
+        let failureMessage = "";
+        let failureData: unknown = data;
+        if (error?.context instanceof Response) {
+          failureData = await error.context.json().catch(() => null);
+        }
+        const failureCode = (failureData as { error?: unknown } | null)?.error;
+        if (typeof failureCode === "string") failureMessage = xPublishErrorMessage(failureCode);
+        const proof = parseXNotStartedFailure(failureData, requestId);
+        if (proof) {
+          rememberXUncertain(id, postId, proof.requestId, false);
+          setXAttempts((current) => removeXOptimisticAttempt(current, postId, proof.requestId));
+          // Restore server-authoritative attempts, including any earlier attempt.
+          // A failed reload blocks history actions, but does not undo the proof.
+          await loadXAttempts(id).catch(() => setXAttemptsLoaded(false));
+          return { result: null, failureMessage: xPublishErrorMessage(proof.error), notStarted: true };
+        }
+        return { result: null, failureMessage, notStarted: false };
+      }
+      applyXResult(id, postId, result);
+      return { result, failureMessage: "", notStarted: false };
+    } catch { return { result: null, failureMessage: "", notStarted: false }; }
+  }
+  async function checkXPublishStatus(postId: string) {
+    if (!supabase || !workspaceId || xPublishBusy.current) return;
+    xPublishBusy.current = true;
+    setXPublishingId(postId);
+    try {
+      // This endpoint reads saved state only, not the provider.
+      const { data, error } = await supabase.functions.invoke("social-x-publish", {
+        body: { action: "status", postId },
+      });
+      const parsed = parseXPublishResult(data);
+      const pendingRequest = xAttempts[postId]?.request_id;
+      const result = !error && parsed && (!pendingRequest || parsed.requestId === pendingRequest || parsed.state === "published")
+        ? parsed : null;
+      if (result) applyXResult(workspaceId, postId, result);
+      await loadXAttempts(workspaceId);
+      setNotice({
+        tone: result?.state === "published" ? "success" : "info",
+        text: result ? xPublishMessage(result.state) : "保存状態を確定できません。再送せずX上の投稿を手動で確認してください。",
+      });
+    } catch {
+      setNotice({ tone: "error", text: "保存状態を確認できません。再送せずX上の投稿を手動で確認してください。" });
+    } finally {
+      xPublishBusy.current = false;
+      setXPublishingId(null);
+    }
+  }
+  async function confirmXPublish(record?: HistoryRecord) {
+    if (!supabase || !workspaceId || !canPublishX || xPublishBusy.current || xConfirmation) return;
+    const attempt = record ? xAttempts[record.id] : null;
+    const resume = attempt?.state === "preparing";
+    if (record && resume && Date.parse(xNextChecks[record.id] ?? "") > Date.now()) {
+      setNotice({ tone: "info", text: "Xで動画を処理中です。表示された時刻以降に確認してください。" });
+      return;
+    }
+    if (record && (!xAttemptsLoaded || (xAttemptLocksPost(attempt) && !resume))) return;
+    const body = record?.body ?? postText;
+    const files = record ? record.files.filter((file) => file.variant === "original") : [...attachedFiles];
+    const targetChannels = record?.channels ?? [...selectedChannels];
+    const validation = validateXPost(body, files);
+    if (!targetChannels.includes("x") || !validation.valid) {
+      setNotice({ tone: "error", text: validation.error || "投稿先にXを選択してください。" });
+      return;
+    }
+    if (integrations.x.status !== "登録済み") {
+      setNotice({ tone: "error", text: "SNS接続設定でXに接続してください。" });
+      return;
+    }
+    if (files.length && !integrations.x.scopes.split(/[,\s]+/).includes("media.write")) {
+      setNotice({ tone: "error", text: xPublishErrorMessage("media_permission_required") });
+      return;
+    }
+    const requestId = resume && attempt ? attempt.request_id : crypto.randomUUID();
+    const confirmedWorkspace = workspaceId;
+    // Capture all content before any await. These copies, not live composer state,
+    // become the confirmation and the eventual request.
+    const rawBody = record ? body : validation.text;
+    const capturedFiles = files.map((file) => ({ ...file }));
+    const capturedChannels = [...targetChannels];
+    xPublishBusy.current = true;
+    setXPublishingId(record?.id ?? "composer");
+    try {
+      const { data, error } = await supabase.functions.invoke("social-x-publish", {
+        body: { action: "preview", workspaceId: confirmedWorkspace },
+      });
+      const connection = !error ? parseXConnectionPreview(data) : null;
+      if (!connection) throw new Error("not_connected");
+      const frozenFiles: Array<LocalAttachment | SavedFile> = [];
+      const expectedFiles: XExpectedFile[] = [];
+      for (const file of capturedFiles) {
+        if ("file" in file) {
+          const frozen = await freezeXMediaFile(file.file, file.size);
+          frozenFiles.push({ ...file, file: frozen.file });
+          expectedFiles.push({
+            id: file.id, storagePath: "", mimeType: file.type, sizeBytes: file.size, sha256: frozen.sha256,
+          });
+        } else {
+          const { data: blob, error: downloadError } = await supabase.storage
+            .from("social-post-files").download(file.storagePath);
+          if (downloadError || !blob) throw new Error("storage_failed");
+          const { sha256 } = await xMediaDigest(blob, file.size);
+          frozenFiles.push(file);
+          expectedFiles.push({
+            id: file.id, storagePath: file.storagePath, mimeType: file.type, sizeBytes: file.size, sha256,
+          });
+        }
+      }
+      setXConfirmation({
+        workspaceId: confirmedWorkspace, body: validation.text, files: frozenFiles, channels: capturedChannels,
+        postId: record?.id, requestId, resume: Boolean(resume), username: connection.username,
+        expected: { body: rawBody, files: expectedFiles, connectionFingerprint: connection.fingerprint },
+      });
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        text: xPublishErrorMessage(error instanceof Error ? error.message : "storage_failed"),
+      });
+    } finally {
+      xPublishBusy.current = false;
+      setXPublishingId(null);
+    }
+  }
+  async function publishConfirmedX() {
+    const snapshot = xConfirmation;
+    if (!snapshot || !supabase || !user || snapshot.workspaceId !== workspaceId ||
+        !canPublishX || xPublishBusy.current) return;
+    xPublishBusy.current = true;
+    setSavingPost(true);
+    setXPublishingId(snapshot.postId ?? "composer");
+    setXConfirmation(null);
+    let postId = snapshot.postId ?? null;
+    let dispatchAttempted = false;
+    const uploadedStoragePaths: string[] = [];
+    const fileIds: string[] = [];
+    const expected: XPublishExpected = {
+      body: snapshot.expected.body, files: snapshot.expected.files.map((file) => ({ ...file })),
+      connectionFingerprint: snapshot.expected.connectionFingerprint,
+    };
+    let message = "";
+    let tone: "success" | "error" | "info" = "info";
+    try {
+      if (!postId) {
+        const { data: post, error: postError } = await supabase.from("social_posts").insert({
+          workspace_id: snapshot.workspaceId, title: snapshot.body.replace(/\s+/g, " ").slice(0, 48),
+          body: expected.body, scheduled_at: null, status: "draft",
+          owner_name: user.email ?? "担当者", format: "Post", created_by: user.id,
+        }).select("id").single();
+        if (postError) throw postError;
+        postId = post.id;
+        const { error: channelError } = await supabase.from("social_post_channels").insert(
+          snapshot.channels.map((channel) => ({ post_id: post.id, channel })),
+        );
+        if (channelError) throw channelError;
+        for (const [index, attachment] of (snapshot.files as LocalAttachment[]).entries()) {
+          const storagePath = `${snapshot.workspaceId}/${post.id}/${crypto.randomUUID()}-${safeFileName(attachment.name)}`;
+          const { error: uploadError } = await supabase.storage.from("social-post-files").upload(storagePath, attachment.file, {
+            contentType: attachment.type, upsert: false,
+          });
+          if (uploadError) throw uploadError;
+          uploadedStoragePaths.push(storagePath);
+          const { data: saved, error: fileError } = await supabase.from("social_post_files").insert({
+            workspace_id: snapshot.workspaceId, post_id: post.id, storage_path: storagePath,
+            file_name: attachment.name, content_type: attachment.type, file_size: attachment.size,
+            created_by: user.id, media_variant: "original",
+          }).select("id").single();
+          if (fileError) throw fileError;
+          fileIds.push(saved.id);
+          expected.files[index] = { ...expected.files[index], id: saved.id, storagePath };
+        }
+        // Manual X publishing uses originals, never the crop/Cloud Run dispatcher.
+        for (const attachment of attachedFiles) if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+        setPostText("");
+        setScheduledAt("");
+        setAttachedFiles([]);
+      } else {
+        fileIds.push(...snapshot.files.map((file) => file.id));
+      }
+      if (!postId) throw new Error("missing_saved_post");
+      // Beyond this boundary, retain the post/files even if every response is lost.
+      dispatchAttempted = true;
+      const { result, failureMessage, notStarted } = await invokeXPublish(snapshot.workspaceId, postId, snapshot.requestId, fileIds, expected);
+      message = notStarted
+        ? `${failureMessage} Xへの送信は開始されていません。内容を確認してから再度操作してください。`
+        : xPublishMessage(result?.state ?? "unknown");
+      if (failureMessage && !notStarted) message += ` ${failureMessage}`;
+      if (result?.state === "rejected") message += ` ${xPublishErrorMessage(result.errorCode)}`;
+      tone = result?.state === "published" ? "success" : result?.state === "rejected" || notStarted ? "error" : "info";
+      await loadWorkspaceData(user);
+      setSelectedHistoryId(postId);
+      setActiveView("history");
+    } catch {
+      if (!dispatchAttempted && !snapshot.postId && postId) {
+        await rollbackFailedSchedule(postId, uploadedStoragePaths);
+      }
+      message = dispatchAttempted ? xPublishMessage("unknown") : "投稿の保存に失敗しました。Xには送信していません。";
+      tone = dispatchAttempted ? "info" : "error";
+      if (dispatchAttempted) setActiveView("history");
+    } finally {
+      setNotice({ tone, text: message });
+      setSavingPost(false);
+      setXPublishingId(null);
+      xPublishBusy.current = false;
+    }
+  }
+
   async function loadWorkspaceData(currentUser: User) {
     if (!supabase) return;
     setDataLoading(true);
+    setXAttemptsLoaded(false);
+    setCanPublishX(false);
     setNotice(null);
 
     try {
@@ -870,6 +1197,14 @@ export default function SocialConsole() {
       }
 
       setWorkspaceId(activeWorkspace.id);
+      if (activeWorkspace.created_by === currentUser.id) {
+        setCanPublishX(true);
+      } else {
+        const { data: role, error: roleError } = await supabase
+          .from("social_workspace_members").select("role")
+          .eq("workspace_id", activeWorkspace.id).eq("user_id", currentUser.id).maybeSingle();
+        setCanPublishX(!roleError && Boolean(role && ["owner", "admin", "member"].includes(role.role)));
+      }
       setCurrentStore(selectedStore as StoreRow);
       setSelectedStoreId(selectedStore.id);
       setStoreSelectionRequired(false);
@@ -880,7 +1215,7 @@ export default function SocialConsole() {
           supabase
             .from("social_posts")
             .select(
-              "id, title, body, scheduled_at, status, owner_name, format, created_at, social_post_channels(channel), social_post_files(id, file_name, file_size, content_type, storage_path, media_variant)",
+              "id, title, body, scheduled_at, status, owner_name, format, created_at, social_post_channels(channel), social_post_files(id, file_name, file_size, content_type, storage_path, media_variant, created_at)",
             )
             .eq("workspace_id", activeWorkspace.id)
             .order("created_at", { ascending: false }),
@@ -923,7 +1258,9 @@ export default function SocialConsole() {
           owner: post.owner_name || currentUser.email || "担当者",
           format: post.format,
           savedAt: formatDateTime(post.created_at),
-          files: (post.social_post_files ?? []).map((file) => ({
+          files: [...(post.social_post_files ?? [])].sort((a, b) =>
+            a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id),
+          ).map((file) => ({
             id: file.id,
             name: file.file_name,
             size: Number(file.file_size),
@@ -948,6 +1285,7 @@ export default function SocialConsole() {
       );
 
       setHistory(records);
+      await loadXAttempts(activeWorkspace.id);
       setSelectedHistoryId((current) =>
         current && records.some((record) => record.id === current)
           ? current
@@ -1157,6 +1495,7 @@ export default function SocialConsole() {
   }
 
   function toggleChannel(id: ChannelId) {
+    if (xPublishBusy.current || xConfirmation) return;
     setSelectedChannels((current) =>
       current.includes(id)
         ? current.filter((channelId) => channelId !== id)
@@ -1165,6 +1504,7 @@ export default function SocialConsole() {
   }
 
   function optimizeCopy() {
+    if (xPublishBusy.current || xConfirmation) return;
     const base =
       postText.trim() ||
       "投稿本文を入力すると、運用向けの文面に整えられます。";
@@ -1174,6 +1514,7 @@ export default function SocialConsole() {
   }
 
   function handleFileSelection(event: ChangeEvent<HTMLInputElement>) {
+    if (xPublishBusy.current || xConfirmation) return;
     const picked = Array.from(event.target.files ?? []);
     event.target.value = "";
     if (!picked.length) return;
@@ -1204,6 +1545,7 @@ export default function SocialConsole() {
   }
 
   function removeAttachment(id: string) {
+    if (xPublishBusy.current || xConfirmation) return;
     setAttachedFiles((current) => {
       const target = current.find((file) => file.id === id);
       if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
@@ -1213,6 +1555,7 @@ export default function SocialConsole() {
   }
 
   function saveAttachmentCrop(id: string, crop: MediaCropConfig) {
+    if (xPublishBusy.current || xConfirmation) return;
     setAttachedFiles((current) =>
       current.map((file) => (file.id === id ? { ...file, crop } : file)),
     );
@@ -1220,6 +1563,7 @@ export default function SocialConsole() {
   }
 
   async function schedulePost() {
+    if (xPublishBusy.current || xConfirmation) return;
     if (
       !supabase ||
       !user ||
@@ -1391,6 +1735,7 @@ export default function SocialConsole() {
 
   async function cancelScheduledPost(postId: string) {
     if (!supabase || !user) return;
+    if (!xAttemptsLoaded || xAttemptLocksPost(xAttempts[postId]) || xPublishingId) return;
     const target = history.find((record) => record.id === postId);
     if (!target || target.status !== "予約済み") return;
     if (!window.confirm("この予約投稿をキャンセルして下書きに戻しますか？")) {
@@ -1427,6 +1772,7 @@ export default function SocialConsole() {
 
   async function rescheduleDraftPost(postId: string) {
     if (!supabase || !user) return;
+    if (!xAttemptsLoaded || xAttemptLocksPost(xAttempts[postId]) || xPublishingId) return;
     const target = history.find((record) => record.id === postId);
     if (
       !target ||
@@ -1476,6 +1822,7 @@ export default function SocialConsole() {
 
   async function deleteSavedPost(postId: string) {
     if (!supabase || !user) return;
+    if (!xAttemptsLoaded || xAttemptLocksPost(xAttempts[postId]) || xPublishingId) return;
     const target = history.find((record) => record.id === postId);
     if (
       !target ||
@@ -2333,6 +2680,7 @@ export default function SocialConsole() {
                 <button
                   className="ghost-button"
                   type="button"
+                  disabled={savingPost || Boolean(xPublishingId)}
                   onClick={optimizeCopy}
                 >
                   <Wand2 aria-hidden="true" size={17} />
@@ -2346,6 +2694,7 @@ export default function SocialConsole() {
                   <button
                     key={channel.id}
                     type="button"
+                    disabled={savingPost || Boolean(xPublishingId)}
                     className={selectedChannels.includes(channel.id) ? `channel-toggle ${channel.tone} active` : `channel-toggle ${channel.tone}`}
                     onClick={() => toggleChannel(channel.id)}
                     aria-pressed={selectedChannels.includes(channel.id)}
@@ -2362,6 +2711,7 @@ export default function SocialConsole() {
               </label>
               <textarea
                 id="post-copy"
+                disabled={savingPost || Boolean(xPublishingId)}
                 value={postText}
                 onChange={(event) => setPostText(event.target.value)}
                 maxLength={2200}
@@ -2378,6 +2728,7 @@ export default function SocialConsole() {
                   <span><strong>画像・動画・ファイルを添付</strong><small>クリックしてファイルを選択</small></span>
                   <input
                     type="file"
+                    disabled={savingPost || Boolean(xPublishingId)}
                     accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx"
                     multiple
                     onChange={handleFileSelection}
@@ -2427,6 +2778,7 @@ export default function SocialConsole() {
                             onClick={() => setEditingAttachmentId(file.id)}
                             title="動画編集"
                             type="button"
+                            disabled={savingPost || Boolean(xPublishingId)}
                           >
                             <Scissors aria-hidden="true" size={14} />
                             <span>動画編集</span>
@@ -2434,6 +2786,7 @@ export default function SocialConsole() {
                         )}
                         <button
                           type="button"
+                          disabled={savingPost || Boolean(xPublishingId)}
                           onClick={() => removeAttachment(file.id)}
                           aria-label={`${file.name}を削除`}
                         >
@@ -2459,6 +2812,7 @@ export default function SocialConsole() {
                   <span>公開予定日時（端末の現地時間）</span>
                   <input
                     type="datetime-local"
+                    disabled={savingPost || Boolean(xPublishingId)}
                     min={toDateTimeLocalValue(new Date())}
                     value={scheduledAt}
                     onChange={(event) => setScheduledAt(event.target.value)}
@@ -2469,7 +2823,7 @@ export default function SocialConsole() {
                   type="button"
                   variant="primary"
                   onPress={schedulePost}
-                  isDisabled={savingPost}
+                  isDisabled={savingPost || Boolean(xPublishingId)}
                 >
                   {savingPost ? (
                     <Loader2 className="spin" aria-hidden="true" size={18} />
@@ -2480,6 +2834,27 @@ export default function SocialConsole() {
                 </Button>
               </div>
               <p className="publishing-note"><AlertCircle size={15} aria-hidden="true" />予約内容を保存します。SNSへの自動公開は準備中です。</p>
+              <section className="x-publication-panel" aria-label="Xへの手動投稿">
+                <h4><ChannelLogo channel="x" small />Xへ今すぐ投稿</h4>
+                <p>文章と元のJPEG・PNG画像（4枚まで・各5MiB）、または元のMP4動画（1本・20MiB）を送信します。動画編集は反映しません。</p>
+                <p>日時の指定は不要です。他のSNSには送信しません。X APIの利用クレジットを消費し、費用が発生する可能性があります。</p>
+                <div className="x-publication-actions">
+                  <Button className="primary-button" type="button" variant="primary"
+                    onPress={() => confirmXPublish()}
+                    isDisabled={savingPost || Boolean(xPublishingId) || !canPublishX ||
+                      !selectedChannels.includes("x") || integrations.x.status !== "登録済み" || !xComposerValidation.valid ||
+                      (attachedFiles.length > 0 && !integrations.x.scopes.split(/[,\s]+/).includes("media.write"))}>
+                    <Send aria-hidden="true" size={17} /><span>Xへの投稿内容を確認</span>
+                  </Button>
+                  <span>X加重文字数 {xComposerValidation.weightedLength}/280</span>
+                </div>
+                {selectedChannels.includes("x") && xComposerValidation.error &&
+                  <p className="x-publication-warning" role="status">{xComposerValidation.error}</p>}
+                {!canPublishX && <p>閲覧専用の利用者はXへ投稿できません。</p>}
+                {integrations.x.status !== "登録済み" && <p>Xの本人認可と接続を完了してから利用できます。</p>}
+                {attachedFiles.length > 0 && !integrations.x.scopes.split(/[,\s]+/).includes("media.write") &&
+                  <p className="x-publication-warning">画像・動画にはXの追加権限が必要です。API設定でmedia.writeを保存し、Xへ再連携してください。文章だけなら現在の権限で利用できます。</p>}
+              </section>
             </div>
 
             <aside className="preview-panel" aria-label="投稿内容の確認">
@@ -2551,6 +2926,7 @@ export default function SocialConsole() {
                         <button
                           className="queue-cancel-button"
                           type="button"
+                          disabled={!xAttemptsLoaded || xAttemptLocksPost(xAttempts[post.id]) || Boolean(xPublishingId)}
                           onClick={() => void cancelScheduledPost(post.id)}
                           aria-label={`${post.title}の予約をキャンセル`}
                         >
@@ -2647,6 +3023,7 @@ export default function SocialConsole() {
                             >
                               <ChannelLogo channel={channelId} small />
                               {channelById[channelId].label}
+                              {channelId === "x" && xAttempts[record.id] && <small>{xPublishStateLabel(xAttempts[record.id].state)}</small>}
                             </span>
                           ))}
                         </div>
@@ -2697,10 +3074,41 @@ export default function SocialConsole() {
                       >
                         <ChannelLogo channel={channelId} small />
                         {channelById[channelId].label}
+                        {channelId === "x"
+                          ? <small>{xAttempts[selectedHistory.id] ? xPublishStateLabel(xAttempts[selectedHistory.id].state) : "未公開"}</small>
+                          : <small>未公開（送信機能は未実装）</small>}
                       </span>
                     ))}
                   </div>
-                  {(selectedHistory.status === "下書き" ||
+                  {selectedHistory.channels.includes("x") && (
+                    <section className="x-publication-panel" aria-label="保存済み投稿のX公開状態">
+                      <h4>{xAttempts[selectedHistory.id] ? xPublishStateLabel(xAttempts[selectedHistory.id].state) : "X: 未公開"}</h4>
+                      {!xAttemptsLoaded ? <p>公開状態を読み込めません。内容の変更・削除・送信は保留してください。</p>
+                        : xAttempts[selectedHistory.id] && <p>{xPublishMessage(xAttempts[selectedHistory.id].state)}</p>}
+                      {xAttempts[selectedHistory.id]?.state === "rejected" &&
+                        <p>{xPublishErrorMessage(xAttempts[selectedHistory.id].error_code)}</p>}
+                      {xNextChecks[selectedHistory.id] && <p>動画の次回確認: {formatDateTime(xNextChecks[selectedHistory.id])} 以降</p>}
+                      {xPostLink(xAttempts[selectedHistory.id]?.remote_post_id) &&
+                        <a href={xPostLink(xAttempts[selectedHistory.id]?.remote_post_id)!} target="_blank" rel="noopener noreferrer">Xの公開投稿を開く</a>}
+                      <div className="x-publication-actions">
+                        {canPublishX && xAttemptsLoaded &&
+                          (!xAttemptLocksPost(xAttempts[selectedHistory.id]) || xAttempts[selectedHistory.id]?.state === "preparing") &&
+                          ["下書き", "予約済み", "失敗"].includes(selectedHistory.status) && (
+                            <button type="button" className="primary-button" disabled={Boolean(xPublishingId) || savingPost ||
+                              xCheckTime < Date.parse(xNextChecks[selectedHistory.id] ?? "")}
+                              onClick={() => confirmXPublish(selectedHistory)}>
+                              {xAttempts[selectedHistory.id]?.state === "preparing" ? "動画の処理状況を確認して投稿" : "Xへの投稿内容を確認"}
+                            </button>
+                          )}
+                        <button type="button" className="ghost-button" disabled={Boolean(xPublishingId)}
+                          onClick={() => void checkXPublishStatus(selectedHistory.id)}>
+                          保存状態を確認（X APIへの通信なし）
+                        </button>
+                      </div>
+                      <p>手動投稿はXのみです。予約の自動実行は行いません。</p>
+                    </section>
+                  )}
+                  {!xAttemptLocksPost(xAttempts[selectedHistory.id]) && (selectedHistory.status === "下書き" ||
                     selectedHistory.status === "失敗") && (
                     <div className="history-recovery">
                       <label>
@@ -2717,7 +3125,7 @@ export default function SocialConsole() {
                       <div className="history-recovery-actions">
                         <button
                           className="history-reschedule-button"
-                          disabled={updatingHistoryId === selectedHistory.id}
+                          disabled={updatingHistoryId === selectedHistory.id || !xAttemptsLoaded || Boolean(xPublishingId)}
                           type="button"
                           onClick={() =>
                             void rescheduleDraftPost(selectedHistory.id)
@@ -2736,7 +3144,7 @@ export default function SocialConsole() {
                         </button>
                         <button
                           className="history-delete-button"
-                          disabled={updatingHistoryId === selectedHistory.id}
+                          disabled={updatingHistoryId === selectedHistory.id || !xAttemptsLoaded || Boolean(xPublishingId)}
                           type="button"
                           onClick={() =>
                             void deleteSavedPost(selectedHistory.id)
@@ -3002,7 +3410,8 @@ export default function SocialConsole() {
               {activeIntegrationId === "x" && (
                 <div className="x-oauth-note" role="status">
                   <p>OAuth 2.0のClient IDを使用します。数値のApp IDやBearer Tokenではありません。</p>
-                  <p>Access TokenとRefresh TokenはXの許可後にサーバーで管理され、画面には表示しません。連携しても実投稿・予約の自動公開はまだ行われません。</p>
+                  <p>Access TokenとRefresh TokenはXの許可後にサーバーで管理され、画面には表示しません。手動公開は投稿内容の確認後に実行します。予約の自動公開は行いません。</p>
+                  <p>画像・動画にはmedia.writeの追加権限が必要です。Scopesの変更を保存すると現在の接続は無効になり、Xへの再連携が必要です。設定変更や再連携は自動で行いません。</p>
                   {xOAuthServer !== "ready" && (
                     <p>
                       {xOAuthServer === "checking" ? "連携サーバーの公開状態を確認中です。" :
@@ -3203,6 +3612,12 @@ export default function SocialConsole() {
                       )
                     }
                   />
+                  {activeIntegrationId === "x" && !activeIntegration.scopes.split(/[,\s]+/).includes("media.write") && (
+                    <button className="ghost-button" type="button" onClick={() =>
+                      updateIntegration("x", "scopes", defaultScopes.x)}>
+                      画像・動画用のScopesを入力（まだ保存しません）
+                    </button>
+                  )}
                 </label>
               </fieldset>
 
@@ -3272,6 +3687,27 @@ export default function SocialConsole() {
         )}
         </section>
       </main>
+      <dialog ref={xConfirmationRef} className="x-publish-dialog" aria-labelledby="x-publish-confirm-title"
+        onCancel={(event) => { event.preventDefault(); setXConfirmation(null); }}>
+        {xConfirmation && (
+          <>
+            <h3 id="x-publish-confirm-title">Xへの公開を確認</h3>
+            <p><strong>送信先: {xConfirmation.username ? `@${xConfirmation.username}` : "接続済みのXアカウント"} のみ</strong></p>
+            <p>他のSNSには送信しません。X APIのクレジットを消費し、費用が発生する可能性があります。</p>
+            <p>以下の本文と元ファイルをそのまま送信します。動画編集は反映しません。</p>
+            <p className="x-publish-frozen-body">{xConfirmation.body}</p>
+            <p>X加重文字数 {validateXPost(xConfirmation.body, xConfirmation.files).weightedLength}/280</p>
+            <ul>{xConfirmation.files.map((file) => <li key={file.id}>{file.name} / {formatFileSize(file.size)} / {file.type}</li>)}</ul>
+            {xConfirmation.resume && <p>保存済みの同じ送信要求を続行し、動画の処理状態を確認します。</p>}
+            <p>公開結果が不明な場合は自動再送しません。X上の投稿を手動で確認してください。</p>
+            <div className="x-publication-actions">
+              <button className="ghost-button" type="button" onClick={() => setXConfirmation(null)}>戻る</button>
+              <button className="primary-button" type="button" disabled={savingPost || Boolean(xPublishingId)}
+                onClick={() => void publishConfirmedX()}>{xConfirmation.resume ? "動画の処理状況を確認して投稿" : "この内容をXへ公開する"}</button>
+            </div>
+          </>
+        )}
+      </dialog>
       {editingAttachment?.previewUrl && (
         <MediaEditor
           fileName={editingAttachment.name}

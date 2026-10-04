@@ -1,5 +1,22 @@
 # Instatic TalksX Handoff
 
+## 2026-10-04 20:23 JST concurrent Google rollout preserved in feature integration
+
+Before publication, origin/main advanced to `08e7dc70c5b28b5ae0a624f789cdac8aff900553`
+(Google sign-in PR #11). The feature merge preserves its Pages public flag,
+Google documentation/tests, and both handoff/progress histories. Generated
+knowledge outputs were regenerated from the combined source tree, not selected
+from one side. X runtime/SQL sources remain unchanged, so no backend redeploy.
+The nine initial mirror conflicts all match this committed main, not independent
+edits. Source sync uses that known baseline and preserves unrelated mirror files.
+
+Merged local checks: 47 Node regressions, 31 mocked publication tests, function
+check, TypeScript, lint with only the existing warning, and static Pages build
+with the production Google flag. Knowledge checks/diff checks pass. Feature
+PR: https://github.com/MARUGO-s/sns_management/pull/12. Normal CI/exact-head squash
+and Pages publication remain pending; never merge unknown heads or bypass checks.
+
+
 ## 2026-10-04 Google login rollout (current Auth status)
 
 The owner manually saved the Google provider on shared gourmet project
@@ -10,6 +27,95 @@ No DB/RLS, app authorization, X connection, or existing gourmet redirect change.
 Provider-enabled is not proof of successful client-secret exchange or completed
 login. Owner login and existing UID/store/data continuity still need verification.
 This supersedes older notes saying Google is disabled on gourmet.
+
+## 2026-10-04 20:14 JST manual publishing backend deployed, frontend PR pending
+
+This overrides the local-only rollout status below. The exact additive migration
+`20261004110000_social_x_publications.sql` was applied atomically once to
+`ycsqfajidusuibqljjwr`; canonical SHA-256:
+`71d9be14c75bf7cbbe5b86aea7abbbb9f07d001b8ba2813addf156a97210051c`.
+All six non-SNS schema fingerprints and both prior Storage trigger/ACL
+fingerprints remain unchanged. Only the SNS publication Storage fence was added.
+Eight metadata checks verified migration recording, RLS, client-write/private
+access denial and service-only RPC execution. No production rows were tested.
+
+Only `social-x-publish` (version 1, JWT required), `social-x-oauth` (version 2,
+JWT required), and `social-x-oauth-callback` (version 2, JWT false) were deployed.
+All six unrelated Functions, including SNS secrets/media jobs, are unchanged.
+Unauthenticated publishing/OAuth requests returned 401. Do not reapply this
+migration or deploy unrelated Functions. No X calls, posts, uploads, refresh,
+reauthorization or payment changes were performed by this implementation task.
+
+Final local checks passed: 45 Node regressions, 31 publication Deno mocks,
+17 OAuth Deno mocks, 24 combined UI tests, TypeScript, lint (one existing hook
+warning), all shared/OAuth/publication isolated DB and concurrency checks, and
+static Pages build. Independent security and bug recovery re-reviews found no
+blockers. Synthetic exact desktop/mobile layouts and hydrated async confirmation,
+cancel/edit/reconfirm and local-file digest/freeze were verified with mock-only
+preview. Final send/upload/persistence and real provider integration remain
+untested. Existing dependency audit findings did not increase (28 total);
+no unrelated dependency updates were attempted.
+
+Knowledge maps and authorized manual notes were updated; `knowledge:check` and
+`git diff --check` passed. Frontend feature PR/CI/Pages and source-mirror sync
+are next. Existing four-scope live connection is preserved; `media.write`
+configuration/reauthorization and a real post require separate user decisions.
+No scheduler was added. Public app: https://marugo-s.github.io/sns_management/.
+
+
+## 2026-10-04 20:10 JST manual X publishing locally verified, rollout pending
+
+User requested manual publishing with text, images and video. Branch:
+`feat/x-manual-publishing`, base `640b09688068c833baca56dc620b51e03785be2a`.
+No implementation commit/PR or production publishing deployment yet.
+The existing live OAuth connection below remains the production baseline.
+See `docs/X_PUBLISHING.md` for the bounded contract and official source URLs.
+
+Confirmation binds raw saved body, ordered original-file metadata and SHA-256,
+plus an opaque target-connection fingerprint obtained from a DB-only preview.
+The initial prepare RPC compares this snapshot before claiming. All original
+bytes are checked before any initial refresh/upload. Connection binding is
+fixed at prepare; same-key continuation allows its own valid refresh without
+resetting the saved account/generation boundary. Only a known rollback of the
+initial SQL prepare proves `notStarted`; transport failure or a later absent
+status does not prove it. Preserve the request ID on uncertain outcomes.
+The durable dispatch gate permits one provider create request, not blind retries.
+
+Initial limits: required weighted-280 text, JPEG/PNG up to 5MiB each and four
+images, or one MP4 up to 20MiB; no mixing, processed variants or scheduler.
+Video processing waits require an explicit continuation. Media expiry can
+shorten, not extend. Existing four-scope connections stay unchanged; images
+and video require separately approved `media.write` configuration and
+reauthorization. No real posts, media uploads, reauthorization, purchases,
+recharge/cap changes or paid provider tests are authorized by implementation.
+
+Passed: 42 Node regressions, 17 mocked OAuth Deno tests, isolated shared DB/
+publishing/OAuth assertions and multi-connection races, and Pages static build.
+Final publishing Deno run passed 31 mocks (16 provider, 15 orchestration);
+the combined UI run passed 24 tests. Independent focused final security
+review reported no blocking findings. Updated synthetic QA used exact
+1440×1000 and 390×844 same-origin iframe viewports: no overflow, centered
+dialog, synthetic target username and disabled media-scope confirmation.
+Native outer-window resize still does not set the measured viewport.
+
+Hydrated production-component tests used preview-only mock Supabase:
+composer disabled while preview is pending, cancel/edit/reconfirm works,
+and local File digest/freezing reaches confirmation. Exact expected digest
+was not extracted from React state. No final publishing, Storage save/upload
+or OAuth was clicked; mock final actions reject and external traffic is denied.
+These checks do not establish real provider acceptance or persistence.
+Evidence: workspace `../reports/qa/x-manual-publication/follow-up.txt`.
+Targeted backend migration is in progress with its deployment owner; its
+result is pending, so do not claim the migration or Functions are applied.
+
+Next: final checks/reviews, manual notes and `knowledge:update`, normal PR/CI
+and exact-head squash, then scoped rollout of
+`20261004110000_social_x_publications.sql`, `social-x-publish` and the two
+media-scope-compatible OAuth Functions. Do not reapply old OAuth migrations,
+db push/reset, modify shared Auth/unrelated apps/Cloud Run, or regenerate
+knowledge concurrently with unfinished source changes. Sync the authorized
+tracked-source mirror with conflict checks and secret/build exclusions.
+Root must replace this pending state with actual rollout results at closure.
 
 ## 2026-10-04 19:01 JST live X authorization and persisted connection verified
 

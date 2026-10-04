@@ -22,7 +22,10 @@
     "test:db": "node scripts/test-shared-db.mjs",
     "test:db:oauth": "node supabase/tests/social_x_oauth_runner.mjs",
     "test:x-oauth": "deno test --no-config supabase/functions/_shared/x-oauth_test.ts",
-    "check:x-oauth": "deno check --config supabase/functions/social-x-oauth/deno.json supabase/functions/social-x-oauth/index.ts && deno check --config supabase/functions/social-x-oauth-callback/deno.json supabase/functions/social-x-oauth-callback/index.ts && deno check --config supabase/functions/social-integration-secrets/deno.json supabase/functions/social-integration-secrets/index.ts"
+    "check:x-oauth": "deno check --config supabase/functions/social-x-oauth/deno.json supabase/functions/social-x-oauth/index.ts && deno check --config supabase/functions/social-x-oauth-callback/deno.json supabase/functions/social-x-oauth-callback/index.ts && deno check --config supabase/functions/social-integration-secrets/deno.json supabase/functions/social-integration-secrets/index.ts",
+    "check:x-publish": "deno check --config supabase/functions/social-x-publish/deno.json supabase/functions/social-x-publish/index.ts",
+    "test:x-publish": "deno test --no-config supabase/functions/_shared/x-publish-provider_test.ts supabase/functions/_shared/x-publish-handler_test.ts",
+    "test:db:x-publish": "node supabase/tests/social_x_publish_runner.mjs"
   },
   "dependencies": {
     "@heroui/react": "^3.2.2",
@@ -31,7 +34,8 @@
     "lucide-react": "^1.27.0",
     "next": "16.2.6",
     "react": "19.2.6",
-    "react-dom": "19.2.6"
+    "react-dom": "19.2.6",
+    "twitter-text": "3.1.0"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
@@ -39,6 +43,7 @@
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
+    "@types/twitter-text": "3.1.10",
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
     "eslint": "9.39.4",

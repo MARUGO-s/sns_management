@@ -5,6 +5,7 @@ export const SCOPES = [
   "users.read",
   "offline.access",
 ] as const;
+export const MEDIA_SCOPE = "media.write";
 export const APP_URL = "https://marugo-s.github.io/sns_management/";
 export type OAuthConfiguration = {
   appId: string;
@@ -38,14 +39,16 @@ export function normalizeScopes(value: unknown): string {
   const list = typeof value === "string"
     ? value.split(/[\s,]+/).filter(Boolean)
     : [];
-  if (list.some((s) => !SCOPES.includes(s as typeof SCOPES[number]))) {
+  if (list.some((s) =>
+    s !== MEDIA_SCOPE && !SCOPES.includes(s as typeof SCOPES[number])
+  )) {
     throw new OAuthError("invalid_request");
   }
   // All four are required for writing and durable offline refresh. An empty value selects defaults.
   if (list.length && SCOPES.some((s) => !list.includes(s))) {
     throw new OAuthError("invalid_request");
   }
-  return SCOPES.join(" ");
+  return [...SCOPES, ...(list.includes(MEDIA_SCOPE) ? [MEDIA_SCOPE] : [])].join(" ");
 }
 export function callbackUrl(supabaseUrl: string): string {
   const url = new URL(supabaseUrl);
@@ -220,7 +223,11 @@ export async function exchangeToken(
     throw new OAuthError("invalid_token", 502);
   }
   try {
-    normalizeScopes(data.scope);
+    const granted = normalizeScopes(data.scope).split(" ");
+    const required = normalizeScopes(input.scopes).split(" ");
+    if (required.some((scope) => !granted.includes(scope))) {
+      throw new OAuthError("invalid_token");
+    }
   } catch {
     throw new OAuthError("invalid_token", 502);
   }
