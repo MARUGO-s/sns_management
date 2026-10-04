@@ -44,6 +44,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -60,6 +61,19 @@ import MediaEditor, {
 import VideoViewer from "./video-viewer";
 import { ChannelLogo, type ChannelId } from "./channel-logo";
 import { filterPosts, scheduledPosts, type PostFilter, type PostStatus } from "./lib/post-list";
+import {
+  getXOAuthCallbackUrl,
+  hasUnsavedComposer,
+  integrationInputReady,
+  isXOAuthConnected,
+  parseXOAuthCallback,
+  safeXAuthorizationUrl,
+  xOAuthCallbackMessage,
+  xOAuthConfigureBody,
+  xOAuthFailureMessage,
+  XOAuthUiError,
+  type XOAuthCallback,
+} from "./lib/x-oauth";
 
 type ViewId =
   | "compose"
@@ -437,6 +451,48 @@ export default function SocialConsole() {
   const [dataLoading, setDataLoading] = useState(false);
   const [savingPost, setSavingPost] = useState(false);
   const [savingIntegration, setSavingIntegration] = useState(false);
+  const [xOAuthServer, setXOAuthServer] = useState<"unknown" | "checking" | "ready" | "unavailable">("unknown");
+  const [pendingXCallback, setPendingXCallback] = useState<XOAuthCallback | null>(() =>
+    typeof window === "undefined" ? null : parseXOAuthCallback(window.location.href).callback,
+  );
+  const calculatedXCallbackUrl = getXOAuthCallbackUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  const reloadXIntegration = useCallback(async (id: string) => {
+    if (!supabase) return false;
+    const [metadata, result] = await Promise.all([
+      supabase.from("social_integrations")
+        .select("app_id, callback_url, scopes, status, updated_at")
+        .eq("workspace_id", id).eq("channel", "x").maybeSingle(),
+      supabase.functions.invoke("social-x-oauth", {
+        body: { action: "status", workspaceId: id },
+      }),
+    ]);
+    if (metadata.error || result.error || !result.data?.status) {
+      setXOAuthServer("unavailable");
+      throw new Error("x_status_unavailable");
+    }
+    setXOAuthServer("ready");
+    const flags = result.data.status;
+    const stored: SecretFlags = {
+      clientSecret: flags.clientSecret === true,
+      accessToken: flags.accessToken === true,
+      refreshToken: flags.refreshToken === true,
+      webhookSecret: flags.webhookSecret === true,
+    };
+    const connected = isXOAuthConnected(metadata.data?.status, result.data);
+    setIntegrations((current) => ({
+      ...current,
+      x: {
+        ...createIntegration("x"),
+        appId: metadata.data?.app_id ?? "",
+        scopes: metadata.data?.scopes ?? defaultScopes.x,
+        callbackUrl: calculatedXCallbackUrl,
+        stored,
+        status: connected ? "登録済み" : metadata.data ? "要確認" : "未設定",
+        updatedAt: metadata.data ? formatDateTime(metadata.data.updated_at) : "未保存",
+      },
+    }));
+    return connected;
+  }, [calculatedXCallbackUrl]);
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -539,6 +595,54 @@ export default function SocialConsole() {
   useEffect(() => {
     if (user) void loadWorkspaceData(user);
   }, [user]);
+
+  useEffect(() => {
+    const result = parseXOAuthCallback(window.location.href);
+    if (result.hasCallbackParams) {
+      window.history.replaceState(window.history.state, "", result.cleanedUrl);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!user || !workspaceId || dataLoading || !pendingXCallback) return;
+    const callback = pendingXCallback;
+    let active = true;
+    void Promise.resolve().then(() => reloadXIntegration(workspaceId)).then((connected) => {
+      if (!active) return;
+      setActiveView("settings");
+      setActiveIntegrationId("x");
+      setMobileMenuOpen(false);
+      setNotice({
+        tone: callback.status === "success" && connected ? "success" : callback.status === "denied" ? "info" : "error",
+        text: callback.status === "success" && !connected
+          ? "Xの認可後の保存状態を確認できませんでした。接続完了ではありません。再読み込みするか、Xに再連携してください。"
+          : xOAuthCallbackMessage(callback),
+      });
+      setPendingXCallback(null);
+    }).catch(() => {
+      if (active) {
+        setActiveView("settings");
+        setActiveIntegrationId("x");
+        setMobileMenuOpen(false);
+        setNotice({ tone: "error", text: xOAuthFailureMessage("") });
+        setPendingXCallback(null);
+      }
+    });
+    return () => { active = false; };
+  }, [user, workspaceId, dataLoading, pendingXCallback, reloadXIntegration]);
+
+  useEffect(() => {
+    if (!supabase || !workspaceId || activeView !== "settings" || activeIntegrationId !== "x") return;
+    let active = true;
+    void supabase.functions.invoke("social-x-oauth", {
+      body: { action: "status", workspaceId },
+    }).then(({ data, error }) => {
+      if (active) setXOAuthServer(error || !data?.status ? "unavailable" : "ready");
+    }).catch(() => {
+      if (active) setXOAuthServer("unavailable");
+    });
+    return () => { active = false; };
+  }, [workspaceId, activeView, activeIntegrationId]);
 
   useEffect(() => {
     if (!supabase || !user) return;
@@ -882,6 +986,29 @@ export default function SocialConsole() {
           ) {
             nextIntegrations[channel.id].status = "登録済み";
           }
+        }
+      }
+
+      // A legacy manually stored X token is not proof of an OAuth connection.
+      const xMetadata = (integrationsResult.data ?? []).find((row) => row.channel === "x");
+      if (xMetadata) {
+        nextIntegrations.x.status = "要確認";
+        const { data: xStatus, error: xError } = await supabase.functions.invoke("social-x-oauth", {
+          body: { action: "status", workspaceId: activeWorkspace.id },
+        });
+        if (!xError && xStatus?.status) {
+          nextIntegrations.x.stored = {
+            clientSecret: xStatus.status.clientSecret === true,
+            accessToken: xStatus.status.accessToken === true,
+            refreshToken: xStatus.status.refreshToken === true,
+            webhookSecret: xStatus.status.webhookSecret === true,
+          };
+          if (isXOAuthConnected(xMetadata.status, xStatus)) {
+            nextIntegrations.x.status = "登録済み";
+          }
+          setXOAuthServer("ready");
+        } else {
+          setXOAuthServer("unavailable");
         }
       }
 
@@ -1519,15 +1646,113 @@ export default function SocialConsole() {
     }));
   }
 
-  async function saveIntegration(id: ChannelId) {
-    if (!supabase || !user || !workspaceId) return;
-    const target = integrations[id];
-    const hasAccessToken =
-      Boolean(target.accessToken.trim()) || target.stored.accessToken;
-    if (!target.appId.trim() || !hasAccessToken) {
+  async function invokeXOAuth(body: Record<string, unknown>) {
+    if (!supabase) throw new XOAuthUiError(xOAuthFailureMessage("not_configured"));
+    let result;
+    try {
+      result = await supabase.functions.invoke("social-x-oauth", { body });
+    } catch {
+      setXOAuthServer("unavailable");
+      throw new XOAuthUiError(xOAuthFailureMessage(""));
+    }
+    const { data, error } = result;
+    if (error) {
+      // Only a bounded error code is forwarded. Provider bodies and secrets never reach notices.
+      let code = "";
+      if ("context" in error && error.context instanceof Response) {
+        try {
+          const failure = await error.context.clone().json();
+          code = typeof failure?.error === "string" ? failure.error : "";
+        } catch { /* Network/unpublished function errors use the generic safe notice. */ }
+      }
+      setXOAuthServer("unavailable");
+      throw new XOAuthUiError(xOAuthFailureMessage(code));
+    }
+    if (!data || data.ok === false) throw new XOAuthUiError(xOAuthFailureMessage(data?.error));
+    setXOAuthServer("ready");
+    return data;
+  }
+
+  async function configureXOAuth() {
+    if (!workspaceId) throw new XOAuthUiError(xOAuthFailureMessage("not_configured"));
+    const target = integrations.x;
+    if (!integrationInputReady("x", target)) {
+      throw new XOAuthUiError("OAuth 2.0 Client IDを入力してください。数値のApp IDではありません。");
+    }
+    const data = await invokeXOAuth(xOAuthConfigureBody(workspaceId, target));
+    setIntegrations((current) => ({
+      ...current,
+      x: {
+        ...current.x,
+        clientSecret: "",
+        accessToken: "",
+        refreshToken: "",
+        webhookSecret: "",
+        callbackUrl: calculatedXCallbackUrl,
+        status: "要確認",
+        updatedAt: formatDateTime(new Date().toISOString()),
+        stored: {
+          ...current.x.stored,
+          clientSecret: data.status?.clientSecret === true || current.x.stored.clientSecret,
+        },
+      },
+    }));
+  }
+
+  async function startXOAuth() {
+    if (!supabase || !user || !workspaceId || savingIntegration) return;
+    if (hasUnsavedComposer({ postText, attachmentCount: attachedFiles.length, scheduledAt, channelCount: selectedChannels.length })) {
+      setNotice({
+        tone: "info",
+        text: "認可画面への移動で未保存の投稿が失われないよう、先に下書きを保存するか未保存の入力を消してからXに連携してください。",
+      });
+      return;
+    }
+    setSavingIntegration(true);
+    setNotice(null);
+    try {
+      await configureXOAuth();
+      const data = await invokeXOAuth({ action: "start", workspaceId });
+      const authorizationUrl = safeXAuthorizationUrl(data.authorizationUrl);
+      window.location.assign(authorizationUrl);
+    } catch (error) {
       setNotice({
         tone: "error",
-        text: "Client ID / App ID と Access Token は必須です。",
+        text: error instanceof XOAuthUiError ? error.message :
+          error instanceof Error && error.message === "invalid_authorization_url"
+            ? "認可URLを安全に確認できませんでした。Xの認可画面には移動していません。"
+            : xOAuthFailureMessage(""),
+      });
+    } finally {
+      setSavingIntegration(false);
+    }
+  }
+
+  async function refreshXOAuth() {
+    if (!supabase || !user || !workspaceId || savingIntegration || !integrations.x.stored.refreshToken) return;
+    setSavingIntegration(true);
+    setNotice(null);
+    try {
+      await invokeXOAuth({ action: "refresh", workspaceId });
+      const connected = await reloadXIntegration(workspaceId);
+      setNotice({
+        tone: connected ? "success" : "error",
+        text: connected ? "Xのトークンを更新しました。自動公開はまだ行われません。" : "Xの接続状態を確認できません。Xに再連携してください。",
+      });
+    } catch (error) {
+      setNotice({ tone: "error", text: error instanceof XOAuthUiError ? error.message : xOAuthFailureMessage("") });
+    } finally {
+      setSavingIntegration(false);
+    }
+  }
+
+  async function saveIntegration(id: ChannelId) {
+    if (!supabase || !user || !workspaceId || savingIntegration) return;
+    const target = integrations[id];
+    if (!integrationInputReady(id, target)) {
+      setNotice({
+        tone: "error",
+        text: id === "x" ? "OAuth 2.0 Client IDを入力してください。" : "Client ID / App ID と Access Token は必須です。",
       });
       return;
     }
@@ -1536,6 +1761,14 @@ export default function SocialConsole() {
     setNotice(null);
 
     try {
+      if (id === "x") {
+        await configureXOAuth();
+        setNotice({
+          tone: "info",
+          text: "Xのアプリ設定を保存しました。「Xに連携」で許可を完了してください。投稿・自動公開はまだ有効になりません。",
+        });
+        return;
+      }
       const { error: metadataError } = await supabase
         .from("social_integrations")
         .upsert(
@@ -1573,7 +1806,7 @@ export default function SocialConsole() {
         await supabase
           .from("social_integrations")
           .update({
-            status: "incomplete",
+            status: "needs_review",
             updated_at: new Date().toISOString(),
           })
           .eq("workspace_id", workspaceId)
@@ -1601,7 +1834,9 @@ export default function SocialConsole() {
     } catch (error) {
       setNotice({
         tone: "error",
-        text: getErrorMessage(error, "連携情報の保存に失敗しました。"),
+        text: id === "x"
+          ? error instanceof XOAuthUiError ? error.message : xOAuthFailureMessage("")
+          : getErrorMessage(error, "連携情報の保存に失敗しました。"),
       });
     } finally {
       setSavingIntegration(false);
@@ -1610,9 +1845,7 @@ export default function SocialConsole() {
 
   function checkIntegrationInput(id: ChannelId) {
     const target = integrations[id];
-    const ready =
-      Boolean(target.appId.trim()) &&
-      (Boolean(target.accessToken.trim()) || target.stored.accessToken);
+    const ready = integrationInputReady(id, target);
     setIntegrations((current) => ({
       ...current,
       [id]: {
@@ -1622,7 +1855,9 @@ export default function SocialConsole() {
     }));
     setNotice({
       tone: ready ? "success" : "error",
-      text: ready
+      text: id === "x"
+        ? ready ? "Client IDを確認しました。これは入力確認のみです。「Xに連携」でXの許可を完了してください。" : "OAuth 2.0 Client IDを確認してください。"
+        : ready
         ? "必須項目を確認しました。登録ボタンで保存してください。"
         : "Client ID / App ID と Access Token を確認してください。",
     });
@@ -2764,11 +2999,24 @@ export default function SocialConsole() {
                 </p>
               </div>
 
-              <div className="form-grid">
+              {activeIntegrationId === "x" && (
+                <div className="x-oauth-note" role="status">
+                  <p>OAuth 2.0のClient IDを使用します。数値のApp IDやBearer Tokenではありません。</p>
+                  <p>Access TokenとRefresh TokenはXの許可後にサーバーで管理され、画面には表示しません。連携しても実投稿・予約の自動公開はまだ行われません。</p>
+                  {xOAuthServer !== "ready" && (
+                    <p>
+                      {xOAuthServer === "checking" ? "連携サーバーの公開状態を確認中です。" :
+                        "表示中のCallback URLは接続先から計算した予定URLです。連携サーバーが未公開・未設定、または応答を確認できないため、まだ使用可能とは確認できません。"}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <fieldset className="form-grid integration-fields" disabled={savingIntegration}>
                 <label className="integration-field">
                   <span>
                     <KeyRound aria-hidden="true" size={15} />
-                    Client ID / App ID
+                    {activeIntegrationId === "x" ? "OAuth 2.0 Client ID" : "Client ID / App ID"}
                   </span>
                   <input
                     value={activeIntegration.appId}
@@ -2779,7 +3027,7 @@ export default function SocialConsole() {
                         event.target.value,
                       )
                     }
-                    placeholder={`${activeChannel.label} App ID`}
+                    placeholder={activeIntegrationId === "x" ? "X Developer ConsoleのOAuth 2.0 Client ID" : `${activeChannel.label} App ID`}
                     autoComplete="off"
                   />
                 </label>
@@ -2827,6 +3075,23 @@ export default function SocialConsole() {
                   </div>
                 </label>
 
+                {activeIntegrationId === "x" ? (
+                  <>
+                    <div className="integration-field">
+                      <span><ShieldCheck aria-hidden="true" size={15} />Access Token</span>
+                      <p className="server-managed-token">
+                        {activeIntegration.stored.accessToken ? "保存済み・サーバー管理（値は非表示）" : "未取得・「Xに連携」で取得"}
+                      </p>
+                    </div>
+                    <div className="integration-field">
+                      <span><RefreshCcw aria-hidden="true" size={15} />Refresh Token</span>
+                      <p className="server-managed-token">
+                        {activeIntegration.stored.refreshToken ? "保存済み・サーバー管理（値は非表示）" : "未取得・offline.accessの許可後に取得"}
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
                 <label className="integration-field">
                   <span>
                     <ShieldCheck aria-hidden="true" size={15} />
@@ -2871,9 +3136,11 @@ export default function SocialConsole() {
                         ? "保存済み（変更時のみ入力）"
                         : "任意"
                     }
-                    autoComplete="new-password"
+                      autoComplete="new-password"
                   />
                 </label>
+                  </>
+                )}
 
                 <label className="integration-field wide">
                   <span>
@@ -2881,7 +3148,8 @@ export default function SocialConsole() {
                     Callback URL
                   </span>
                   <input
-                    value={activeIntegration.callbackUrl}
+                    value={activeIntegrationId === "x" ? calculatedXCallbackUrl : activeIntegration.callbackUrl}
+                    readOnly={activeIntegrationId === "x"}
                     onChange={(event) =>
                       updateIntegration(
                         activeIntegrationId,
@@ -2889,11 +3157,12 @@ export default function SocialConsole() {
                         event.target.value,
                       )
                     }
-                    placeholder={`https://your-domain.example/oauth/${activeIntegrationId}/callback`}
+                    placeholder={activeIntegrationId === "x" ? "Supabaseの公開URLが未設定です" : `https://your-domain.example/oauth/${activeIntegrationId}/callback`}
                     autoComplete="url"
                   />
                 </label>
 
+                {activeIntegrationId !== "x" && (
                 <label className="integration-field">
                   <span>
                     <ShieldCheck aria-hidden="true" size={15} />
@@ -2917,6 +3186,7 @@ export default function SocialConsole() {
                     autoComplete="new-password"
                   />
                 </label>
+                )}
 
                 <label className="integration-field wide">
                   <span>
@@ -2934,7 +3204,7 @@ export default function SocialConsole() {
                     }
                   />
                 </label>
-              </div>
+              </fieldset>
 
               <div className="settings-actions">
                 <Button
@@ -2949,8 +3219,32 @@ export default function SocialConsole() {
                   ) : (
                     <Save aria-hidden="true" size={18} />
                   )}
-                  <span>安全に登録</span>
+                  <span>{activeIntegrationId === "x" ? "アプリ設定を保存" : "安全に登録"}</span>
                 </Button>
+                {activeIntegrationId === "x" && (
+                  <>
+                    <Button
+                      className="primary-button"
+                      type="button"
+                      variant="primary"
+                      onPress={() => void startXOAuth()}
+                      isDisabled={savingIntegration || !calculatedXCallbackUrl}
+                    >
+                      <PlugZap aria-hidden="true" size={18} />
+                      <span>{activeIntegration.stored.accessToken ? "Xに再連携" : "Xに連携"}</span>
+                    </Button>
+                    <Button
+                      className="ghost-button"
+                      type="button"
+                      variant="secondary"
+                      onPress={() => void refreshXOAuth()}
+                      isDisabled={savingIntegration || !activeIntegration.stored.refreshToken}
+                    >
+                      <RefreshCcw aria-hidden="true" size={18} />
+                      <span>トークンを更新</span>
+                    </Button>
+                  </>
+                )}
                 <Button
                   className="ghost-button"
                   type="button"

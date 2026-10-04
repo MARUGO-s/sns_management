@@ -10,7 +10,7 @@
     "build": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
     "build:github-pages": "env STATIC_EXPORT=true NEXT_PUBLIC_APP_BASE_PATH=/sns_management sh -c 'npm run build && node scripts/prepare-github-pages.mjs'",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
-    "test": "npm run build && node --test tests/channel-logo.test.mjs tests/post-list.test.mjs tests/rendered-html.test.mjs tests/knowledge-system.test.mjs workers/media-processor/crop-plan.test.mjs workers/media-processor/encoding-plan.test.mjs workers/media-processor/timeline-plan.test.mjs",
+    "test": "npm run build && node --test tests/*.test.mjs workers/media-processor/crop-plan.test.mjs workers/media-processor/encoding-plan.test.mjs workers/media-processor/timeline-plan.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "backup:dropbox": "node scripts/backup-supabase-to-dropbox.mjs",
     "graphify:system-map": "bash scripts/refresh-system-map.sh",
@@ -19,7 +19,10 @@
     "knowledge:check": "node scripts/check-knowledge-system.mjs",
     "knowledge:search": "node scripts/search-knowledge-vault.mjs",
     "worker:docker:check": "bash scripts/check-media-worker-docker.sh",
-    "test:db": "node scripts/test-shared-db.mjs"
+    "test:db": "node scripts/test-shared-db.mjs",
+    "test:db:oauth": "node supabase/tests/social_x_oauth_runner.mjs",
+    "test:x-oauth": "deno test --no-config supabase/functions/_shared/x-oauth_test.ts",
+    "check:x-oauth": "deno check --config supabase/functions/social-x-oauth/deno.json supabase/functions/social-x-oauth/index.ts && deno check --config supabase/functions/social-x-oauth-callback/deno.json supabase/functions/social-x-oauth-callback/index.ts && deno check --config supabase/functions/social-integration-secrets/deno.json supabase/functions/social-integration-secrets/index.ts"
   },
   "dependencies": {
     "@heroui/react": "^3.2.2",

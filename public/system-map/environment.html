@@ -43,9 +43,9 @@
         <p class="summary">実行環境と、AIがGraphify・Obsidianを使って探索・実装・検証・知識保存する循環を、同じ構造モデルから生成しています。</p>
       </div>
       <div class="stats">
-        <span class="stat">390 Graphify nodes</span>
-        <span class="stat">437 relationships</span>
-        <span class="stat">36 communities</span>
+        <span class="stat">494 Graphify nodes</span>
+        <span class="stat">638 relationships</span>
+        <span class="stat">46 communities</span>
         <span class="stat">generated 2026-10-04</span>
       </div>
     </header>
@@ -54,7 +54,7 @@
     </nav>
 
       <section class="diagram-panel is-active" data-diagram-panel="runtime">
-        <svg viewBox="0 0 1440 900" role="img"
+        <svg viewBox="0 0 1440 1150" role="img"
     aria-labelledby="runtime-title runtime-desc"
     xmlns="http://www.w3.org/2000/svg">
     <title id="runtime-title">アプリ実行・デプロイ環境</title>
@@ -92,7 +92,7 @@
         markerWidth="7" markerHeight="7" orient="auto-start-reverse">
         <path d="M 0 0 L 10 5 L 0 10 z" fill="#fdba74" />
       </marker></defs>
-    <rect width="1440" height="900" fill="#07111f" />
+    <rect width="1440" height="1150" fill="#07111f" />
     <text x="40" y="42" fill="#f8fafc" font-size="25" font-weight="850">アプリ実行・デプロイ環境</text>
     <text x="40" y="66" fill="#94a3b8" font-size="13">利用者のブラウザからSupabase、Cloud Run、GitHub Pagesまでの実行時・配信経路。</text>
 
@@ -211,7 +211,7 @@
           <rect x="803" y="223" width="140" height="24"
             rx="7" fill="#0f172a" fill-opacity=".92" />
           <text x="873" y="239" text-anchor="middle"
-            fill="#dbeafe" font-size="12" font-weight="650">暗号化済み秘密行</text>
+            fill="#dbeafe" font-size="12" font-weight="650">サーバー専用の秘密情報行</text>
         </g>
         <g class="edge edge-job">
           <line x1="896" y1="365" x2="850" y2="335"
@@ -266,6 +266,42 @@
             rx="7" fill="#0f172a" fill-opacity=".92" />
           <text x="1018" y="356.5" text-anchor="middle"
             fill="#dbeafe" font-size="12" font-weight="650">状態・処理済みfile row</text>
+        </g>
+        <g class="edge edge-auth">
+          <line x1="514" y1="360" x2="890" y2="950"
+            stroke="#67e8f9"
+            stroke-width="2.2" marker-end="url(#arrow-auth)" />
+          <rect x="632" y="643" width="140" height="24"
+            rx="7" fill="#0f172a" fill-opacity=".92" />
+          <text x="702" y="659" text-anchor="middle"
+            fill="#dbeafe" font-size="12" font-weight="650">認証JWTで設定・認可開始・更新</text>
+        </g>
+        <g class="edge edge-auth">
+          <line x1="1144" y1="950" x2="1180" y2="940"
+            stroke="#67e8f9"
+            stroke-width="2.2" marker-end="url(#arrow-auth)" />
+          <rect x="1092" y="933" width="140" height="24"
+            rx="7" fill="#0f172a" fill-opacity=".92" />
+          <text x="1162" y="949" text-anchor="middle"
+            fill="#dbeafe" font-size="12" font-weight="650">認可code / PKCE / token API</text>
+        </g>
+        <g class="edge edge-secret">
+          <line x1="1020" y1="866" x2="715" y2="420"
+            stroke="#fca5a5"
+            stroke-width="2.2" marker-end="url(#arrow-secret)" />
+          <rect x="797.5" y="631" width="140" height="24"
+            rx="7" fill="#0f172a" fill-opacity=".92" />
+          <text x="867.5" y="647" text-anchor="middle"
+            fill="#dbeafe" font-size="12" font-weight="650">所属・state・世代・token保管</text>
+        </g>
+        <g class="edge edge-auth">
+          <line x1="896" y1="950" x2="520" y2="360"
+            stroke="#67e8f9"
+            stroke-width="2.2" marker-end="url(#arrow-auth)" />
+          <rect x="638" y="643" width="140" height="24"
+            rx="7" fill="#0f172a" fill-opacity=".92" />
+          <text x="708" y="659" text-anchor="middle"
+            fill="#dbeafe" font-size="12" font-weight="650">固定ルートへ安全な結果だけ</text>
         </g>
 
         <g class="node" data-node-id="operator">
@@ -399,7 +435,7 @@
             width="194" height="62">
             <div xmlns="http://www.w3.org/1999/xhtml"
               style="color:#aebbd0;font:12px/1.35 system-ui;text-align:center;overflow:hidden">
-              SNS秘密情報の書き込み窓口。ブラウザから保存値を読ませない。
+              SNS秘密情報の書き込み窓口。変更時は実際の所有者・所属を検証。ブラウザから保存値を読ませない。
             </div>
           </foreignObject>
         </g>
@@ -490,6 +526,36 @@
             <div xmlns="http://www.w3.org/1999/xhtml"
               style="color:#aebbd0;font:12px/1.35 system-ui;text-align:center;overflow:hidden">
               linux/amd64でbuildし、Node・FFmpeg・libx264・非root・crop-plan・実MP4変換を検証。
+            </div>
+          </foreignObject>
+        </g>
+        <g class="node" data-node-id="x_oauth_edge">
+          <rect x="900" y="870" width="240" height="160"
+            rx="14" fill="#111827" stroke="#10b981" stroke-width="2.5" />
+          <rect x="900" y="870" width="8" height="160"
+            rx="4" fill="#10b981" />
+          <text x="1020" y="891" text-anchor="middle"
+            fill="#f8fafc" font-size="15" font-weight="800"><tspan x="1020" dy="0">Edge Functions</tspan><tspan x="1020" dy="20">social-x-oauth / callback</tspan></text>
+          <foreignObject x="918" y="928"
+            width="204" height="92">
+            <div xmlns="http://www.w3.org/1999/xhtml"
+              style="color:#aebbd0;font:12px/1.35 system-ui;text-align:center;overflow:hidden">
+              X OAuth 2.0 S256 PKCE。所属認可、stateの単回取得、サーバー側トークン保存・更新。ローカル実装、本番未反映。
+            </div>
+          </foreignObject>
+        </g>
+        <g class="node" data-node-id="x_provider">
+          <rect x="1190" y="870" width="220" height="140"
+            rx="14" fill="#111827" stroke="#64748b" stroke-width="2.5" />
+          <rect x="1190" y="870" width="8" height="140"
+            rx="4" fill="#64748b" />
+          <text x="1300" y="900" text-anchor="middle"
+            fill="#f8fafc" font-size="15" font-weight="800"><tspan x="1300" dy="0">X OAuth 2.0 / API</tspan></text>
+          <foreignObject x="1208" y="928"
+            width="184" height="72">
+            <div xmlns="http://www.w3.org/1999/xhtml"
+              style="color:#aebbd0;font:12px/1.35 system-ui;text-align:center;overflow:hidden">
+              本人の認可・ユーザー識別・トークン更新。投稿の実行処理は未実装。
             </div>
           </foreignObject>
         </g>
