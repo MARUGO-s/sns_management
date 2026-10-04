@@ -1,5 +1,66 @@
 # Instatic TalksX Handoff
 
+## 2026-10-04 X OAuth local implementation verified, rollout pending
+
+Local branch: `feat/x-oauth-pkce`, based on `02117d430a168eb7ab2546e9dcb8af1c22d2ff71`.
+OAuth 2.0 S256 PKCE support is implemented in the X integration UI and SNS-only
+Edge Functions. See `docs/X_OAUTH.md` for the contract, security boundaries,
+fixed callback, and deployment prerequisites. Final verification passed: 30 Node
+regressions, 16 mocked Deno tests, three Edge Function type checks, TypeScript,
+lint, isolated shared DB/OAuth assertions, and real multi-connection race tests.
+Static GitHub Pages build and synthetic desktop/mobile layout verification passed.
+The layout check used exact-width iframes because native browser resizing did not
+change the reported viewport. SSR effects and authenticated submissions were not
+exercised. No live provider call was made.
+
+No migration, function, frontend, or app-side credential configuration has been
+deployed by this work. X developer registration and provider OAuth configuration
+are complete: read/write without DM/email, confidential web client, fixed callback
+and production website URL. Newly generated client credentials were transferred
+directly into Energy Vault, not files, chat, or logs. Do not claim a connected account until production rollout and the
+owner's OAuth grant are verified. Actual publishing/scheduling remains outside
+this change. Do not send a test post.
+
+The user authorized access to this app's Dropbox knowledge folder and source
+mirror only. This does not grant access to the Dropbox secrets folder, backups,
+or unrelated protected data. The user approved X developer enrollment without
+payment. The registration worker confirmed its approved submission and dashboard
+redirect. The console displayed a default developer app under a Pay Per Use
+project. No app creation, payment, credits purchase, or automatic top-up was
+performed by a worker. Provider API calls remain blocked until any possible
+charges are clarified and authorized.
+The official pricing page lists User Read at $0.01/resource (checked 2026-10-04);
+this does not prove the final `users/me` request is free. See the source links
+in `docs/X_OAUTH.md`.
+
+Migration `20261004070000_social_x_oauth.sql` is additive and unapplied. It adds
+SNS-only configs/state, transaction-scoped membership guards, configuration/token
+revision binding, refresh CAS/receipt persistence, and atomic legacy secrets
+mutation. Deploy this exact migration and the two X Edge Functions plus the
+updated `social-integration-secrets`; never db push/reset the shared project.
+Unchanged configuration saves preserve a working connection. Expired tokens
+report `needsRefresh`, stale configuration reports `needsReview`. Refresh retries
+identical persistence without repeating provider exchange; process/provider/DB
+failures may still require reauthorization.
+
+GitHub browser/CLI sign-in as MARUGO-s and repository administration were
+verified. Supabase hCaptcha is resolved: the browser worker verified owner access
+to the line_management organization's gourmet project, main PRODUCTION branch;
+CLI authentication and exact linking to `ycsqfajidusuibqljjwr` were also verified.
+This access verification is not proof that the OAuth migration/functions are
+deployed.
+
+Knowledge closure completed at 2026-10-04 15:47 JST. The authorized manual
+Obsidian design note `20_設計/X OAuth接続.md` and its architecture link now record
+the decisions, verification, undeployed state, shared-project boundaries, and
+no-charge restriction. `npm run knowledge:update` regenerated code-only
+Graphify, public maps, runtime views, `docs/AI_CONTEXT.md`, and Obsidian outputs:
+494 nodes, 638 edges, 46 communities; consistency and vault secret-marker checks
+passed. `.npmrc` was automatically excluded as potentially sensitive. No LLM
+extraction tokens were used. The feature branch is still uncommitted/unpushed at
+this entry, and the source mirror has not been synchronized. Commit the generated
+outputs first, then sync only Git-managed files with the established exclusions.
+
 ## 2026-10-04 migration override
 
 Authoritative repository: `MARUGO-s/sns_management`; production: `https://marugo-s.github.io/sns_management/`.

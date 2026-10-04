@@ -13,7 +13,7 @@
       "title": "アプリ実行・デプロイ環境",
       "description": "利用者のブラウザからSupabase、Cloud Run、GitHub Pagesまでの実行時・配信経路。",
       "width": 1440,
-      "height": 900
+      "height": 1150
     },
     {
       "id": "knowledge",
@@ -117,7 +117,7 @@
       "view": "runtime",
       "label": "Edge Function\nsocial-integration-secrets",
       "group": "edge",
-      "description": "SNS秘密情報の書き込み窓口。ブラウザから保存値を読ませない。",
+      "description": "SNS秘密情報の書き込み窓口。変更時は実際の所有者・所属を検証。ブラウザから保存値を読ませない。",
       "x": 900,
       "y": 70,
       "width": 230,
@@ -331,6 +331,28 @@
       "y": 780,
       "width": 240,
       "height": 120
+    },
+    {
+      "id": "x_oauth_edge",
+      "view": "runtime",
+      "label": "Edge Functions\nsocial-x-oauth / callback",
+      "group": "edge",
+      "description": "X OAuth 2.0 S256 PKCE。所属認可、stateの単回取得、サーバー側トークン保存・更新。ローカル実装、本番未反映。",
+      "x": 900,
+      "y": 870,
+      "width": 240,
+      "height": 160
+    },
+    {
+      "id": "x_provider",
+      "view": "runtime",
+      "label": "X OAuth 2.0 / API",
+      "group": "provider",
+      "description": "本人の認可・ユーザー識別・トークン更新。投稿の実行処理は未実装。",
+      "x": 1190,
+      "y": 870,
+      "width": 220,
+      "height": 140
     }
   ],
   "edges": [
@@ -422,7 +444,7 @@
       "view": "runtime",
       "from": "integration_secrets",
       "to": "supabase_db",
-      "label": "暗号化済み秘密行",
+      "label": "サーバー専用の秘密情報行",
       "kind": "secret"
     },
     {
@@ -606,6 +628,34 @@
       "to": "human_developer",
       "label": "別PCから参照・編集",
       "kind": "knowledge"
+    },
+    {
+      "view": "runtime",
+      "from": "browser_app",
+      "to": "x_oauth_edge",
+      "label": "認証JWTで設定・認可開始・更新",
+      "kind": "auth"
+    },
+    {
+      "view": "runtime",
+      "from": "x_oauth_edge",
+      "to": "x_provider",
+      "label": "認可code / PKCE / token API",
+      "kind": "auth"
+    },
+    {
+      "view": "runtime",
+      "from": "x_oauth_edge",
+      "to": "supabase_db",
+      "label": "所属・state・世代・token保管",
+      "kind": "secret"
+    },
+    {
+      "view": "runtime",
+      "from": "x_oauth_edge",
+      "to": "browser_app",
+      "label": "固定ルートへ安全な結果だけ",
+      "kind": "auth"
     }
   ],
   "sourcePriority": [

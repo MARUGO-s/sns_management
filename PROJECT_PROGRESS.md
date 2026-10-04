@@ -1,5 +1,21 @@
 # Instatic TalksX 進行記録
 
+## 2026-10-04 X OAuth接続機能（ローカル実装・検証済み、未公開）
+
+- ブランチ: `feat/x-oauth-pkce`。開始HEAD: `02117d430a168eb7ab2546e9dcb8af1c22d2ff71`。
+- Xの投稿権限を含むOAuth 2.0 S256 PKCE、サーバー側のstate管理とトークン更新を実装。
+- API設定だけで接続完了と表示しない。本人の認可後に状態を確認する。
+- 既存のSNS設定変更は実際の所有者・所属を要求し、管理者の閲覧権限と分離する。
+- 最終検証: build、30 Node回帰テスト、16 Denoテスト、3 Edge Functionの型検査、TypeScript、Lint、独立DBの共有境界・OAuth・複数接続競合テストが成功。Pages静的ビルドと1440px／390pxの合成画面確認も成功。
+- 設計・本番適用前提: `docs/X_OAUTH.md`。
+- 本番DB、Edge Functions、Pagesへ本変更は未反映。X側は読み書き（DM・メールなし）、機密Webクライアント、固定Callback・Websiteを保存し再表示確認済み。生成された認証情報は平文を表示・出力せずEnergy Vaultへ保管。
+- 投稿処理は未実装で、テスト投稿もしない。本人のOAuth認可とアプリへのトークン保存は未実施。
+- 共有DBの`db push/reset`、共通Auth変更、既存グルメやCloud Runへの変更は禁止。
+- 利用者は課金なしのX開発者登録を承認。送信担当が承認済み登録の完了を確認した。登録後に既定のアプリを表示し、アプリの新規作成・支払い・クレジット購入・自動チャージ設定は行っていない。
+- XプロジェクトはPay Per Use。利用条件・必要クレジットが未確定のため、課金しない指定に従い本番のAPI呼び出しと最終OAuth検証は保留。
+- 公式料金ではUser Read $0.01／リソースを確認。本人識別APIが無料とは確認できていない。GitHubはMARUGO-sの管理権限とCLI認証を確認済み。SupabaseのhCaptchaは解決し、共有gourmetプロジェクトの所有者アクセス・CLI認証・対象プロジェクトへのlinkを確認済み。
+- 2026-10-04 15:47 JSTに知識更新を完了。手書きObsidianのX OAuth設計ノート、Graphify、環境図、AI入口を更新し、`knowledge:check`で索引の鮮度・統計・秘密値ガードに合格。コミット・push・PR・ソースミラー同期と本番反映はこの記録時点では未実施。
+
 ## 2026-10-04 SNS管理リポジトリ移植（最新状態）
 
 - 対象: `MARUGO-s/sns_management`、公開先 `/sns_management/`。
@@ -126,7 +142,7 @@ Instatic TalksXは、Instagram、TikTok、X、Threadsの運用情報を一括管
 - `npm run knowledge:update`によるGraphify・環境図・Obsidian・AI文書の一括同期
 - Docker DesktopによるCloud Run向けFFmpeg workerのローカル再現性検証
 
-知識環境の最新生成結果は326ノード、343関係、32コミュニティ。ObsidianのInstatic TalksX配下はMarkdown合計373件で、`90_Graphify/`はGraphify生成ノート358件 + 運用説明`_README.md` 1件 + `graph.canvas` + 生成manifestで構成される。`70_AI作業環境/`はAI入口・環境図・Canvas・チェックリスト・Graphify/Obsidianブリッジを含む8ファイル。
+2026-10-04 15:47 JSTの知識環境生成結果は494ノード、638関係、46コミュニティ。ObsidianのInstatic TalksX配下はMarkdown合計559件で、`90_Graphify/`はGraphify生成ノート540件 + 運用説明`_README.md` 1件 + `graph.canvas` + 生成manifestで構成される。`70_AI作業環境/`はAI入口・環境図・Canvas・チェックリスト・Graphify/Obsidianブリッジを含む8ファイル。
 
 現時点では実際のSNS公開処理、コメント・DM同期、Webhook受信、各SNSの分析値取得は未実装。各SNSの開発者アプリ審査、OAuth認可、公開API実装が別途必要。動画クロップの画面、キュー、Edge Function、FFmpegワーカーは実装済みで、Cloud Run実行環境も構築済み。2026-07-28に処理中固定の障害は対応済み。2026-08-14にGoogle OAuthの戻り先誤設定、予約保存の巻き戻し、下書き再予約・削除、所属店舗の取り違え、管理者ステータス不整合を修正した。
 
@@ -1349,3 +1365,27 @@ supabase functions deploy media-jobs --use-api
 - DB・外部設定変更: なし。認証、共有gourmetデータ、SNS秘密値、Storage、Edge Functions、Cloud Runは従来どおり。
 - 知識: 関連手書きノートとGraphify・Obsidianの索引を更新。公開先は `https://marugo-s.github.io/sns_management/`。Gitブランチ `feat/social-console-redesign` から通常のPR・CI・Pages手順で反映。
 - 前回作業: 「API設定」左揃えはPR #6でマージ済み、Pages公開とDropbox側のCSS一致も確認済み。
+
+### 2026-10-04 - X OAuth接続基盤を実装、公開と本人認可は保留
+
+- 依頼: 所有するXアカウントをInstatic TalksXへ接続し、投稿権限を含むAPI設定を完了する。
+- 実装: X専用Client ID・秘密情報の設定、固定Callback表示、認可開始、結果の安全な取り込み、トークン更新。従来のAccess Token手入力ではOAuth接続を完了できなかったため、Xだけ専用フローへ変更。他のSNSの手入力方式は維持。
+- サーバー: S256 PKCE、ハッシュstateの単回取得と10分の期限、開始時・確定時の所属確認、設定／トークンの世代管理、削除・再作成対策、本人識別と一括保存、更新のlease／CAS／保存確認記録。更新の本人名は最後に確認した値を維持し、不要なAPI再取得をしない。
+- 競合修正: 従来の秘密情報保存を原子的な所属確認・部分更新RPCへ変更。古い読み取り結果による更新トークンの巻き戻しを防ぐ。更新APIは1回だけ実行し、DB保存だけ同一内容で最大3回再試行する。分散システム間の完全な原子性は保証せず、プロセス停止や恒久障害は再認可で回復する。
+- 変更: `app/lib/x-oauth.ts`、`app/social-console.tsx`、`app/globals.css`、Xの2 Edge Functionsと共有ヘルパー、既存秘密情報Function、加算migration、Node／Deno／SQL／複数接続テスト、CI、構成モデル、`docs/X_OAUTH.md`と引き継ぎ記録。
+- 検証: 30 Node、16 Deno、TypeScript、3 FunctionsのDenoチェック、Lint、共有DBとOAuthのSQL確認、3つの独立接続競合シナリオ、Pages静的ビルドが成功。追加レビューの3指摘を修正し再確認。実X通信・実データ操作・投稿は行わない。
+- 画面: リポジトリ外の合成SSRハーネスで1440px／390pxを確認。native viewport変更が反映されなかったため正確な幅のiframeでDOM寸法を検証。横はみ出しなし。SSRの認証・送信イベントは未検証。
+- X側: 利用者承認済みの開発者登録を完了。既定Pay Per Useアプリの読み書き、機密Webクライアント、Callback、Websiteを保存。DM・メールは要求しない。新規認証情報はメモリから直接Energy Vaultへ保存し、平文出力・ファイル・撮影はしない。支払い・クレジット購入・自動チャージ・投稿は行わない。
+- 本番: migrationとFunctions、Pages、アプリ側認証情報は未反映。共有gourmet／Auth／Storage／Cloud Runは変更しない。Supabaseは利用者によるhCaptcha完了待ち。GitHubのブラウザ認証・管理権限は確認。
+- 未完了: Supabaseの権限確認、限定migration／Functions公開、PR・CI・Pages公開、Vaultからのアプリ設定、費用条件の利用者確認、本人によるOAuth認可。User Readの公式単価は$0.01／リソースだが、残高ゼロを無料とは扱わない。
+- Git: `feat/x-oauth-pkce`、開始HEAD `02117d430a168eb7ab2546e9dcb8af1c22d2ff71`。本ログ時点ではpush・PR未実施。知識更新とソースミラー同期後にローカル変更を保存する。
+
+### 2026-10-04 15:47 JST - X OAuthの知識・引き継ぎ更新を完了
+
+- 実施: 許可済みObsidianの`20_設計/X OAuth接続.md`を作成し、`アーキテクチャ.md`からリンク。設計判断、先行実装の検証結果、未公開、課金なし、本人認可未実施、共有DB境界を記録した。
+- 更新: `npm run knowledge:update`でコード限定索引、公開システムマップ、環境図、`docs/AI_CONTEXT.md`、ObsidianのGraphify・AI入口を再生成。494ノード・638関係・46コミュニティ。解析のLLMトークン使用は0。
+- 対象外: `.npmrc`は潜在的機密ファイルとして自動除外。SQL、CSS、Supabase設定等の分類対象外ファイルも索引の証拠とはせず、該当ソース・独立DBテストを根拠とする。
+- 検証: 更新処理内と最終の`knowledge:check`、`git diff --check`、知識モデルのNode回帰2件が成功。開始時に検出した4コードファイルの古さと公開統計不一致は解消。Vaultの秘密値マーカー検査に合格。`knowledge:search -- "X OAuth PKCE"`で新規設計ノートが先頭に表示された。
+- アクセス: GitHubのMARUGO-s管理権限・CLI認証、Supabaseの共有gourmet本番プロジェクト所有者アクセス・CLI認証・正確な対象へのlinkを担当者が確認。hCaptcha待ちは解消済み。
+- 本番・Git: この記録時点でOAuth migration、Functions、Pages、アプリ認証情報は未反映。commit・push・PRとソースミラー同期は未実施。本担当はアプリソースや本番を変更しない。
+- 次: 生成物を含めてfeature branchへcommitし、その後にGit管理ツリーだけを許可済みソースミラーへ同期する。限定migration／Functions、通常PR・CI・Pagesを順に反映。費用条件が承認されるまで本番OAuth・X API・テスト投稿は実行しない。

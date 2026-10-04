@@ -1,17 +1,12 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "@supabase/server";
+import { isActualWorkspaceMember } from "../_shared/x-oauth-membership.ts";
+import { safeDatabaseError } from "../_shared/x-oauth.ts";
 
 type ChannelId = "instagram" | "tiktok" | "x" | "threads";
 type Action = "list" | "save" | "delete";
 
 const channels: ChannelId[] = ["instagram", "tiktok", "x", "threads"];
-const secretFields = [
-  "client_secret",
-  "access_token",
-  "refresh_token",
-  "webhook_secret",
-] as const;
-
 function badRequest(message: string, status = 400) {
   return Response.json({ error: message }, { status });
 }
@@ -24,7 +19,12 @@ const integrationSecretsFunction = {
       action?: Action;
       workspaceId?: string;
       channel?: ChannelId;
-      secrets?: Partial<Record<"clientSecret" | "accessToken" | "refreshToken" | "webhookSecret", string>>;
+      secrets?: Partial<
+        Record<
+          "clientSecret" | "accessToken" | "refreshToken" | "webhookSecret",
+          string
+        >
+      >;
     } | null;
 
     if (!payload?.action || !payload.workspaceId) {
@@ -52,7 +52,9 @@ const integrationSecretsFunction = {
       const { data: storedSecrets, error: secretsError } = ids.length
         ? await ctx.supabaseAdmin
           .from("social_integration_secrets")
-          .select("integration_id, client_secret, access_token, refresh_token, webhook_secret")
+          .select(
+            "integration_id, client_secret, access_token, refresh_token, webhook_secret",
+          )
           .in("integration_id", ids)
         : { data: [], error: null };
 
@@ -63,7 +65,9 @@ const integrationSecretsFunction = {
       );
       const status = Object.fromEntries(
         channels.map((channel) => {
-          const integration = (integrations ?? []).find((item) => item.channel === channel);
+          const integration = (integrations ?? []).find((item) =>
+            item.channel === channel
+          );
           const secret = integration ? byIntegration.get(integration.id) : null;
           return [
             channel,
@@ -84,69 +88,51 @@ const integrationSecretsFunction = {
       return badRequest("A supported channel is required");
     }
 
-    const { data: integration, error: integrationError } = await ctx.supabase
-      .from("social_integrations")
-      .select("id")
-      .eq("workspace_id", payload.workspaceId)
-      .eq("channel", payload.channel)
-      .maybeSingle();
-
-    if (integrationError) return badRequest(integrationError.message, 500);
-    if (!integration) return badRequest("Integration not found", 404);
-
-    if (payload.action === "delete") {
-      const { error } = await ctx.supabaseAdmin
-        .from("social_integration_secrets")
-        .delete()
-        .eq("integration_id", integration.id);
-
-      if (error) return badRequest(error.message, 500);
-      return Response.json({ ok: true });
+    const { data: { user }, error: userError } = await ctx.supabase.auth
+      .getUser();
+    if (
+      userError || !user || !await isActualWorkspaceMember(
+        ctx.supabaseAdmin,
+        payload.workspaceId,
+        user.id,
+      )
+    ) {
+      return badRequest("Workspace membership required", 403);
     }
 
-    if (payload.action !== "save") return badRequest("Unsupported action");
-
+    if (payload.action !== "save" && payload.action !== "delete") {
+      return badRequest("Unsupported action");
+    }
     const input = payload.secrets ?? {};
+    if (Object.values(input).some((value) => typeof value !== "string")) {
+      return badRequest("A credential must be text");
+    }
     const incoming = {
-      client_secret: input.clientSecret?.trim() ?? "",
-      access_token: input.accessToken?.trim() ?? "",
-      refresh_token: input.refreshToken?.trim() ?? "",
-      webhook_secret: input.webhookSecret?.trim() ?? "",
+      p_client_secret: input.clientSecret?.trim() ?? "",
+      p_access_token: input.accessToken?.trim() ?? "",
+      p_refresh_token: input.refreshToken?.trim() ?? "",
+      p_webhook_secret: input.webhookSecret?.trim() ?? "",
     };
-
     if (Object.values(incoming).some((value) => value.length > 65536)) {
       return badRequest("A credential is too large");
     }
-
-    const { data: current, error: currentError } = await ctx.supabaseAdmin
-      .from("social_integration_secrets")
-      .select("client_secret, access_token, refresh_token, webhook_secret")
-      .eq("integration_id", integration.id)
-      .maybeSingle();
-
-    if (currentError) return badRequest(currentError.message, 500);
-
-    const merged = { integration_id: integration.id, updated_at: new Date().toISOString() } as
-      Record<string, string>;
-    for (const field of secretFields) {
-      merged[field] = incoming[field] || current?.[field] || "";
+    // Never fetch and merge old secrets in this worker. The RPC verifies current membership,
+    // locks integration/config/credentials and preserves omitted fields inside one transaction.
+    const { data, error } = await ctx.supabaseAdmin.rpc(
+      "social_integration_secrets_mutate",
+      {
+        p_workspace: payload.workspaceId,
+        p_user: user.id,
+        p_channel: payload.channel,
+        p_action: payload.action,
+        ...incoming,
+      } as never,
+    );
+    if (error) {
+      const safe = safeDatabaseError(error);
+      return badRequest(safe.code, safe.status);
     }
-
-    const { error: saveError } = await ctx.supabaseAdmin
-      .from("social_integration_secrets")
-      .upsert(merged as never, { onConflict: "integration_id" });
-
-    if (saveError) return badRequest(saveError.message, 500);
-
-    return Response.json({
-      ok: true,
-      status: {
-        clientSecret: Boolean(merged.client_secret),
-        accessToken: Boolean(merged.access_token),
-        refreshToken: Boolean(merged.refresh_token),
-        webhookSecret: Boolean(merged.webhook_secret),
-      },
-    });
+    return Response.json(data);
   }),
 };
 

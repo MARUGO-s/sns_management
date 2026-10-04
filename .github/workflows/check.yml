@@ -16,10 +16,16 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.6
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npm run lint
+      - run: npm run check:x-oauth
+      - run: npm run test:x-oauth
       - run: npm test
       - run: npm run test:db
+      - run: npm run test:db:oauth
       - run: npm run build:github-pages
       - run: test -f dist/client/index.html

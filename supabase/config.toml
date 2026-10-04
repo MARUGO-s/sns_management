@@ -429,3 +429,15 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/social-media-jobs/deno.json"
 entrypoint = "./functions/social-media-jobs/index.ts"
+
+[functions.social-x-oauth]
+enabled = true
+verify_jwt = true
+import_map = "./functions/social-x-oauth/deno.json"
+entrypoint = "./functions/social-x-oauth/index.ts"
+
+[functions.social-x-oauth-callback]
+enabled = true
+verify_jwt = false
+import_map = "./functions/social-x-oauth-callback/deno.json"
+entrypoint = "./functions/social-x-oauth-callback/index.ts"
