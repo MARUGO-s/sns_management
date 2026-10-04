@@ -1,5 +1,71 @@
 # Instatic TalksX Handoff
 
+## 2026-10-04 20:44 JST media configuration saved but not connected (current connection)
+
+Following the user's separate 20:37:55 JST approval, the browser worker saved
+`tweet.read tweet.write users.read offline.access media.write` at 20:43:03 JST
+and verified the saved notification, unchanged callback/credentials and blank
+secret field. Scope configuration invalidates the prior connection; do not keep
+claiming the 20:37 four-scope saved connection is currently connected.
+The grant target/permissions were checked and Authorize was clicked once, but
+X remained disabled with no verified app return/callback/new-token persistence.
+At 20:44:36 JST a fresh app tab independently showed X `API設定 要確認`,
+five persisted scopes, blank secret and no connection-success indicator.
+Current state is configured but not connected; neither text nor media is ready
+until reconnection completes. Original grant remains disabled, with no retry
+or reload. Root is reporting the obstacle and a retry decision to the user.
+Evidence: `../reports/qa/x-manual-publication/media-reauth.txt`. No real posts,
+uploads, additional provider tests, billing or backend changes occurred.
+Actual posting remains a separate action. The 20:37 UI check below is historical
+evidence of the connection/configuration before this separately approved change.
+
+## 2026-10-04 20:37 JST manual publishing published, read-only UI and then-current connection verified
+
+PR #12 https://github.com/MARUGO-s/sns_management/pull/12 passed CI run
+https://github.com/MARUGO-s/sns_management/actions/runs/37198676592 at exact
+head `dda2c8a4e2f4c7aad364d6a96b8d4ce1734c0e96` and was normally
+squash-merged at 20:29 JST as `225c73282ebaeaec618aa5580b2c384462515522`.
+Pages run https://github.com/MARUGO-s/sns_management/actions/runs/37198925360
+for that same SHA succeeded, checked at 20:32 JST. Concurrent Google sign-in
+PR #11 and its flag/docs/tests remain preserved; no force push or backend reapply.
+
+At 20:37 JST a fresh authenticated task tab verified the live manual region,
+`Xへ今すぐ投稿`, weighted 0/280 count, original JPEG/PNG four × 5MiB or one
+original MP4 20MiB, costs warning, and empty confirmation disabled. Original
+app tabs and unsaved composer input were preserved. X settings retain saved
+integration/reconnect/delete controls, the unchanged four scopes, fixed
+callback, and a blank secret field. These establish saved connection records,
+not a fresh provider identity/token validity check; the original grant was
+verified at 19:01 JST.
+
+Manual text/images/video code and UI are published. Images/video remain gated
+by separately approved `media.write` configuration and reauthorization, never
+automatic scope changes. Live scope absence and the explicit warning were
+checked without attachment/preview. Media-specific confirmation disabling was
+verified only in synthetic QA. No save, upload, post, OAuth, refresh, provider
+test call, payment or backend action was performed in the live check.
+Google login control was not safely available in the authenticated page, so no
+sign-out/new login was attempted; its live control and owner UID/data continuity
+are still not verified. Evidence: `../reports/qa/x-manual-publication/live-published.txt`.
+
+Backend versions and unchanged shared boundaries are in the 20:14 record below;
+do not reapply. Final combined checks passed 47 Node regressions, 31 publication
+Deno mocks, 17 OAuth Deno mocks, 24 UI tests, type checks, isolated DB/concurrency,
+Google-flag Pages build and knowledge checks. Independent security/bug reviews
+have no blockers. Existing lint warning and 28 dependency audit findings remain.
+All 118 tracked source-mirror files matched deployed main at 20:33 JST with
+zero conflicts/deletions. Only three repo documents and two manual notes change
+at closure, no structural/Graphify regeneration. Use a normal docs PR; root owns
+the final conflict-aware mirror sync. Do not recursively log merging this log PR.
+
+Real provider acceptance, posting, upload and production refresh remain untested.
+No scheduler or other-SNS publishing was added. At 20:37:55 JST the user separately
+approved media permission/reauthorization, now handled by its assigned worker;
+the 20:44 follow-up above confirms configuration saved but not connected.
+Actual posting is a separate action. Never post
+or alter billing automatically. This section supersedes historical pending/unimplemented states.
+App: https://marugo-s.github.io/sns_management/.
+
 ## 2026-10-04 20:23 JST concurrent Google rollout preserved in feature integration
 
 Before publication, origin/main advanced to `08e7dc70c5b28b5ae0a624f789cdac8aff900553`
@@ -28,7 +94,7 @@ Provider-enabled is not proof of successful client-secret exchange or completed
 login. Owner login and existing UID/store/data continuity still need verification.
 This supersedes older notes saying Google is disabled on gourmet.
 
-## 2026-10-04 20:14 JST manual publishing backend deployed, frontend PR pending
+## 2026-10-04 20:14 JST historical backend deployment, frontend then pending
 
 This overrides the local-only rollout status below. The exact additive migration
 `20261004110000_social_x_publications.sql` was applied atomically once to
@@ -63,7 +129,7 @@ configuration/reauthorization and a real post require separate user decisions.
 No scheduler was added. Public app: https://marugo-s.github.io/sns_management/.
 
 
-## 2026-10-04 20:10 JST manual X publishing locally verified, rollout pending
+## 2026-10-04 20:10 JST historical local verification, rollout then pending
 
 User requested manual publishing with text, images and video. Branch:
 `feat/x-manual-publishing`, base `640b09688068c833baca56dc620b51e03785be2a`.
@@ -119,7 +185,9 @@ Root must replace this pending state with actual rollout results at closure.
 
 ## 2026-10-04 19:01 JST live X authorization and persisted connection verified
 
-This is the current X status and overrides the earlier 16:05 hold below.
+This remains the evidence for the original X grant and overrides the earlier
+16:05 hold below. Its publishing-unimplemented statements are historical;
+the 20:37 current publishing section above takes precedence.
 At 18:59 JST the user approved using free API credits for connection. One live
 OAuth grant completed at 19:01 JST. The browser worker verified the user-owned
 identity on the grant screen and the expected read/write/offline scopes without
@@ -289,6 +357,10 @@ The legacy OpenAI Sites deployment remains available as a secondary preview only
 `https://instatic-talksx.yoshito0428.chatgpt.site`
 
 ## Current state
+
+The 2026-10-04 current rollout sections above supersede the older infrastructure
+details below. X manual publishing code/UI is now deployed; media permission
+and real provider validation remain separate, and scheduling is not implemented.
 
 - React/Vinext app in `app/social-console.tsx`, `app/admin/admin-console.tsx`, route files, and `app/globals.css`.
 - HeroUI v3 is installed and applied to key action buttons.
