@@ -4,12 +4,12 @@
 - cluster-only mode — file stats not available
 
 ## Summary
-- 494 nodes · 638 edges · 46 communities (37 shown, 9 thin omitted)
+- 495 nodes · 632 edges · 47 communities (38 shown, 9 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 1 edges (avg confidence: 0.5)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `02117d43`
+- Built from commit: `640b0968`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -58,13 +58,13 @@
 1. `scripts` - 18 edges
 2. `compilerOptions` - 16 edges
 3. `SocialConsole()` - 14 edges
-4. `processJob()` - 11 edges
-5. `handleOAuthCallback()` - 9 edges
-6. `exchangeToken()` - 8 edges
-7. `AdminConsole()` - 7 edges
-8. `include` - 7 edges
-9. `createTimelinePlan()` - 7 edges
-10. `appPath()` - 6 edges
+4. `handleOAuthCallback()` - 9 edges
+5. `exchangeToken()` - 8 edges
+6. `include` - 7 edges
+7. `processJob()` - 7 edges
+8. `createTimelinePlan()` - 6 edges
+9. `MediaEditor()` - 6 edges
+10. `public.social_workspaces` - 6 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `SocialConsole()` --calls--> `xOAuthCallbackMessage()`  [EXTRACTED]
@@ -73,22 +73,22 @@
   app/social-console.tsx → app/lib/x-oauth.ts
 - `SocialConsole()` --calls--> `getXOAuthCallbackUrl()`  [EXTRACTED]
   app/social-console.tsx → app/lib/x-oauth.ts
-- `AdminConsole()` --calls--> `appPath()`  [EXTRACTED]
-  app/admin/admin-console.tsx → app/lib/public-path.ts
-- `ChannelLogo()` --calls--> `appPath()`  [EXTRACTED]
-  app/channel-logo.tsx → app/lib/public-path.ts
+- `SocialConsole()` --calls--> `parseXOAuthCallback()`  [EXTRACTED]
+  app/social-console.tsx → app/lib/x-oauth.ts
+- `SocialConsole()` --calls--> `isXOAuthConnected()`  [EXTRACTED]
+  app/social-console.tsx → app/lib/x-oauth.ts
 
 ## Import Cycles
 - None detected.
 
-## Communities (46 total, 9 thin omitted)
+## Communities (47 total, 9 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.08
 Nodes (40): authorizationUrl(), base64url(), CallbackDependencies, handleOAuthCallback(), callbackUrl(), challenge(), exchangeToken(), isActualWorkspaceMember() (+32 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.08
+Cohesion: 0.07
 Nodes (30): AccessState, actionLabels, AdminConsole(), AdminPager(), AdminUserRow, AdminView, adminViews, AuditRow (+22 more)
 
 ### Community 2 - "Community 2"
@@ -108,7 +108,7 @@ Cohesion: 0.08
 Nodes (24): engines, node, name, private, scripts, backup:dropbox, build, build:github-pages (+16 more)
 
 ### Community 6 - "Community 6"
-Cohesion: 0.16
+Cohesion: 0.15
 Nodes (17): clamp(), createCropPlan(), outputByAspect, compactOutputByAspect, createEncodingPlan(), apiHeaders(), encodeObjectPath(), probeVideo() (+9 more)
 
 ### Community 7 - "Community 7"
@@ -204,9 +204,14 @@ Cohesion: 0.50
 Nodes (3): imports, @supabase/functions-js, @supabase/server
 
 ## Knowledge Gaps
-- **218 isolated node(s):** `AdminView`, `AccessState`, `PostStatus`, `SystemMapMode`, `SystemMapStats` (+213 more)
+- **218 isolated node(s):** `config`, `refresh-system-map.sh script`, `nextConfig`, `outputDirectory`, `normalizedBasePath` (+213 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **9 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+
+## Work-memory lessons
+
+**Preferred sources** — corroborated by past sessions; start here.
+- `SocialConsole()` (2× useful, score=1.970425306)
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -215,12 +220,12 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.013) - this node is a cross-community bridge._
 - **Why does `dependencies` connect `Community 11` to `Community 5`?**
   _High betweenness centrality (0.007) - this node is a cross-community bridge._
-- **What connects `AdminView`, `AccessState`, `PostStatus` to the rest of the system?**
+- **What connects `config`, `refresh-system-map.sh script`, `nextConfig` to the rest of the system?**
   _218 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
   _Cohesion score 0.08106219426974144 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
-  _Cohesion score 0.0761904761904762 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07301587301587302 - nodes in this community are weakly interconnected._
 - **Should `Community 2` be split into smaller, more focused modules?**
   _Cohesion score 0.06060606060606061 - nodes in this community are weakly interconnected._
 - **Should `Community 3` be split into smaller, more focused modules?**

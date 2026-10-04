@@ -1,5 +1,14 @@
 # Instatic TalksX 進行記録
 
+## 2026-10-04 Googleログイン公開設定（現在状態）
+
+- 所有者がgourmet共有AuthのGoogle設定を手動保存。公開Auth設定APIでGoogle有効・メール有効を確認。
+- Pagesビルドに公開UIフラグを追加し、既存Googleログインボタンを有効化。秘密鍵はSupabaseだけに保存し、コードには追加しない。
+- 既存メール認証・所属店舗・UIDベースの管理者判定・RLS・X接続は変更しない。共有DBのmigrationやFunctions再配備も行わない。
+- 設定有効と本人ログイン成功は区別する。所有者によるGoogle認証完了と既存UID・店舗・データの維持は未検証。詳細は `docs/GOOGLE_AUTH.md`。
+- 認証開始エンドポイントは302でGoogleへ転送し、対象クライアント・gourmetのCallbackと一致、要求scopeはemail/profileと確認。秘密値・stateは記録しない。32 Node回帰テスト・型検査・Lint・知識整合検査が成功。
+- 以下のGoogle無効という記録は移植時の履歴であり、現在状態は本節を優先する。
+
 ## 2026-10-04 19:01 JST X OAuth本人認可・接続確認完了（現在状態）
 
 - 利用者が18:59 JSTに無料APIクレジットを使うX接続を承認し、19:01 JSTに1回のOAuth認可を完了。認可画面で利用者所有のXアカウントと読み書き・継続更新の権限を確認し、DM・メールは要求しない。
