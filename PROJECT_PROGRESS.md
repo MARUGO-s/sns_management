@@ -16,6 +16,7 @@
 - Docker worker検証に成功（9テスト、実MP4のクロップ・途中カット・音声なし編集）。既存の他アプリ用コンテナは変更せず。
 - 移植PR: https://github.com/MARUGO-s/sns_management/pull/3 。CIの設定未投入時は管理者画面がRestrictedを表示する正常動作にSSR回帰テストを対応。
 - CIの新規Postgres初期化では一時ソケットサーバーの停止と競合したため、TCPで最終サーバーの起動を確認してからSQL検証するよう修正。
+- 2026-10-04 接続アカウント欄の「API設定」表示位置を統一するため、ロゴ横の名前・補足テキスト領域を左揃えにした。CSSのみの変更。DB・認証・SNSロゴ画像は変更しない。
 - 以下は過去の経緯。古い接続先や手順は最新状態より優先しない。
 
 ## 文書情報
@@ -228,6 +229,8 @@ Instatic TalksXは、Instagram、TikTok、X、Threadsの運用情報を一括管
 - 整合性検査: `npm run knowledge:check`
 
 ## 通常画面の機能
+
+2026-10-04: 接続アカウント一覧ではSNS名と「API設定」を左揃えにし、補足ラベルの開始位置を統一。
 
 ### 店舗所属
 
@@ -1322,3 +1325,13 @@ supabase functions deploy media-jobs --use-api
 - 検証: `npm test` 20件成功、Lint・型検査成功。実際の見出しJSXを抽出したローカル専用表示（DB接続なし）でPCと390px幅を確認。4画像読み込み成功、モバイル横はみ出しなし。
 - DB・設定変更: なし。グルメ・SNSの既存データや認証・Storage・Edge Functions・Cloud Runを変更しない。
 - 知識・公開: Graphify索引と手書きSNSロゴノートを更新し、`fix/integration-heading-logo`からPR・CI・Pagesの通常手順で公開する。公開先は`https://marugo-s.github.io/sns_management/`。
+
+### 2026-10-04 - 接続アカウントの「API設定」位置を揃える
+
+- 依頼: Instagram、TikTok、X、Threadsの各カードで「API設定」の書き出し位置を揃える。
+- 実施内容: ロゴ横のテキスト領域を左揃えにし、SNS名の文字幅にかかわらず補足ラベルが同じ位置から始まるようにした。
+- 変更ファイル: `app/globals.css`、`PROJECT_PROGRESS.md`。
+- DB・認証・SNS API設定変更: なし。
+- テスト: 個別テストは追加・実行しない。GitHub ActionsのPRチェック結果を確認する。
+- 未完了事項: PRのマージとPages公開の確認。
+- 次の作業: Pages公開完了後、対象の画面を再読み込みする。
