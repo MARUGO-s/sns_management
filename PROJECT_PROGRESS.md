@@ -1,5 +1,14 @@
 # Instatic TalksX 進行記録
 
+## 2026-10-04 Googleログイン公開設定（現在状態）
+
+- 所有者がgourmet共有AuthのGoogle設定を手動保存。公開Auth設定APIでGoogle有効・メール有効を確認。
+- Pagesビルドに公開UIフラグを追加し、既存Googleログインボタンを有効化。秘密鍵はSupabaseだけに保存し、コードには追加しない。
+- 既存メール認証・所属店舗・UIDベースの管理者判定・RLS・X接続は変更しない。共有DBのmigrationやFunctions再配備も行わない。
+- 設定有効と本人ログイン成功は区別する。所有者によるGoogle認証完了と既存UID・店舗・データの維持は未検証。詳細は `docs/GOOGLE_AUTH.md`。
+- 認証開始エンドポイントは302でGoogleへ転送し、対象クライアント・gourmetのCallbackと一致、要求scopeはemail/profileと確認。秘密値・stateは記録しない。32 Node回帰テスト・型検査・Lint・知識整合検査が成功。
+- 以下のGoogle無効という記録は移植時の履歴であり、現在状態は本節を優先する。
+
 ## 2026-10-04 20:10 JST X手動投稿のローカル検証完了（本番反映完了は未確認）
 
 - 依頼: Xへの投稿機能を進め、文章・画像・動画を対象にする。ブランチは`feat/x-manual-publishing`、開始HEADは`640b09688068c833baca56dc620b51e03785be2a`。commit・PR・投稿機能の本番反映はこの記録時点で未実施。
@@ -1489,3 +1498,11 @@ supabase functions deploy media-jobs --use-api
 - 画面: 1440×1000／390×844で中央確認画面、対象アカウントの合成表示、横はみ出しなし、メディア権限不足時の確認無効化。hydrated実コンポーネントをpreviewのみのモックで動かし、確認中入力禁止、取消し後の編集・再確認、合成元ファイルのdigest／freeze到達を確認。最終送信・アップロード・永続化の実UI操作は未検証。
 - 境界: 実X通信・投稿・アップロード・更新・再認可・購入・支払い／自動チャージ変更はなし。既存4権限の接続を保持。画像・動画の`media.write`追加再認可は利用者の別判断。予約自動公開は未実装。
 - 知識・Git: コード限定Graphify、構成図、Obsidianの索引・手書き設計を更新し、`knowledge:check`と`git diff --check`成功。feature branchから通常PR・CI・正確なhead指定squash・Pagesを進める。フロント公開とソース控えの同期は本記録時点で保留。
+
+
+### 2026-10-04 20:23 JST - 並行Google公開変更を保持してPRを統合
+
+- 追加確認: PR #12作成後にmainのGoogleログイン公開PR #11が進んでいたと判明。Pagesの公開フラグ、Google文書・テスト、両方の進行／引き継ぎ履歴を保持して取り込む。Xの実行コードとSQLは不変、バックエンド再適用なし。
+- 競合: 自動生成の構成図・索引は統合ソースから再生成。ソース控えの9差分は新しい正規main `08e7dc7`と完全一致し、独自編集ではないことを確認。削除・一方の変更への巻き戻し・強制pushなし。
+- 再検証: Node47件、投稿モック31件、Function型チェック、TypeScript、Lint（既存警告のみ）、Googleの本番フラグを有効にしたPagesビルド成功。知識整合と差分確認後、更新PRのCI・通常マージ・Pagesを継続する。
+- PR: https://github.com/MARUGO-s/sns_management/pull/12 。フロント公開・ソース控え同期は本記録時点で保留。実X投稿／メディアアップロード／再認可は引き続き別判断。

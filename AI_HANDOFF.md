@@ -1,5 +1,33 @@
 # Instatic TalksX Handoff
 
+## 2026-10-04 20:23 JST concurrent Google rollout preserved in feature integration
+
+Before publication, origin/main advanced to `08e7dc70c5b28b5ae0a624f789cdac8aff900553`
+(Google sign-in PR #11). The feature merge preserves its Pages public flag,
+Google documentation/tests, and both handoff/progress histories. Generated
+knowledge outputs were regenerated from the combined source tree, not selected
+from one side. X runtime/SQL sources remain unchanged, so no backend redeploy.
+The nine initial mirror conflicts all match this committed main, not independent
+edits. Source sync uses that known baseline and preserves unrelated mirror files.
+
+Merged local checks: 47 Node regressions, 31 mocked publication tests, function
+check, TypeScript, lint with only the existing warning, and static Pages build
+with the production Google flag. Knowledge checks/diff checks pass. Feature
+PR: https://github.com/MARUGO-s/sns_management/pull/12. Normal CI/exact-head squash
+and Pages publication remain pending; never merge unknown heads or bypass checks.
+
+
+## 2026-10-04 Google login rollout (current Auth status)
+
+The owner manually saved the Google provider on shared gourmet project
+`ycsqfajidusuibqljjwr`. The public Auth settings endpoint confirms Google and
+email both enabled. The Pages workflow now explicitly enables the existing
+Google UI flag; other environments remain opt-in. See `docs/GOOGLE_AUTH.md`.
+No DB/RLS, app authorization, X connection, or existing gourmet redirect change.
+Provider-enabled is not proof of successful client-secret exchange or completed
+login. Owner login and existing UID/store/data continuity still need verification.
+This supersedes older notes saying Google is disabled on gourmet.
+
 ## 2026-10-04 20:14 JST manual publishing backend deployed, frontend PR pending
 
 This overrides the local-only rollout status below. The exact additive migration

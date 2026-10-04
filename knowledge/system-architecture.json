@@ -84,7 +84,7 @@
       "view": "runtime",
       "label": "Supabase Auth",
       "group": "supabase",
-      "description": "メール/パスワード認証。Authはグルメと共通だがSNSのセッション保存とログアウトは分離。Google OAuthは現在無効。",
+      "description": "メール/パスワード認証。Authはグルメと共通だがSNSのセッション保存とログアウトは分離。GoogleログインはPagesビルドで有効化、他環境は明示的opt-in。",
       "x": 590,
       "y": 70,
       "width": 220,
