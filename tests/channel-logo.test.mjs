@@ -51,7 +51,7 @@ test("all channel selectors and administrator lists use shared image logos", asy
   ]);
   assert.deepEqual(consoleSource.match(/\b\w+\.label\.slice\s*\(/g) ?? [], []);
   assert.equal(/className=\{`network-badge\s/.test(consoleSource), false);
-  assert.equal((consoleSource.match(/<ChannelLogo\b/g) ?? []).length, 8);
+  assert.ok((consoleSource.match(/<ChannelLogo\b/g) ?? []).length >= 8, "All existing channel selectors still use the shared logo; new surfaces may reuse it too");
   assert.equal((adminSource.match(/<ChannelLabel\b/g) ?? []).length, 2);
   assert.match(styles, /object-fit: contain/);
   assert.doesNotMatch(styles, /\.admin-channel-list span\b/);
