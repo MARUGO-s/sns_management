@@ -1,5 +1,16 @@
 # Instatic TalksX Handoff
 
+## 2026-10-04 Google login rollout (current Auth status)
+
+The owner manually saved the Google provider on shared gourmet project
+`ycsqfajidusuibqljjwr`. The public Auth settings endpoint confirms Google and
+email both enabled. The Pages workflow now explicitly enables the existing
+Google UI flag; other environments remain opt-in. See `docs/GOOGLE_AUTH.md`.
+No DB/RLS, app authorization, X connection, or existing gourmet redirect change.
+Provider-enabled is not proof of successful client-secret exchange or completed
+login. Owner login and existing UID/store/data continuity still need verification.
+This supersedes older notes saying Google is disabled on gourmet.
+
 ## 2026-10-04 19:01 JST live X authorization and persisted connection verified
 
 This is the current X status and overrides the earlier 16:05 hold below.
