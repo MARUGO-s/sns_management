@@ -1,6 +1,36 @@
 # Instatic TalksX Handoff
 
-## 2026-10-04 X OAuth deployed/configured, authorization held under no-charge rule
+## 2026-10-04 19:01 JST live X authorization and persisted connection verified
+
+This is the current X status and overrides the earlier 16:05 hold below.
+At 18:59 JST the user approved using free API credits for connection. One live
+OAuth grant completed at 19:01 JST. The browser worker verified the user-owned
+identity on the grant screen and the expected read/write/offline scopes without
+DM or email. The app confirmed:
+`Xの連携許可が完了しました。投稿・自動公開機能はまだ有効になりません。`
+After reload, X still showed `登録済み`, `Xに再連携`, and server-managed saved
+tokens with values hidden. This verifies post-authorization persistence, not
+merely saved client configuration. The app UI does not display a connected
+handle; identity was checked on the grant screen. Only callback-required
+identity lookup occurred, with no extra/manual API call or token refresh.
+
+After connection, automatic recharge remained OFF and the finite usage cap
+persisted. No credit purchase or post was performed. Spend displays can lag or
+round, so unchanged display does not establish exact API cost or guaranteed
+zero charge. Private billing amounts and payment data do not belong in public
+Git or knowledge notes. Free-credit authorization is not permission to buy
+credits, enable recharge, or add unrelated API usage.
+
+Publishing, scheduled execution, DM, comments, analytics, and webhooks remain
+unimplemented. Live token refresh, expiry, cancellation, and reauthorization
+were not exercised. Do not repeat authorization or send test posts merely for
+verification. Further publishing/API work requires a new user instruction.
+The backend is already deployed: do not reapply migration/Functions or modify
+shared DB/Auth, Cloud Run, or unrelated secrets. This closure changes only
+three repository documents and two manual Obsidian notes, with no structural
+source change and no Graphify regeneration.
+
+## 2026-10-04 16:05 JST historical deployment/configuration record, authorization then held
 
 Local branch: `feat/x-oauth-pkce`, based on `02117d430a168eb7ab2546e9dcb8af1c22d2ff71`.
 OAuth 2.0 S256 PKCE support is implemented in the X integration UI and SNS-only
