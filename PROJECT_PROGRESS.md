@@ -1404,3 +1404,16 @@ supabase functions deploy media-jobs --use-api
 - 記録変更: `PROJECT_PROGRESS.md`、`AI_HANDOFF.md`、`docs/X_OAUTH.md`と手書きObsidianのX OAuth設計ノートへ、バックエンド公開済みと未完了のフロント・アプリ設定・本人認可を分けて記録。コードと生成知識は変更しない。この追加文書変更のcommit／同期は保留。
 - 未完了: PRマージ・Pages公開、Vaultからのアプリ設定、費用条件の利用者確認、本人OAuth認可と接続状態確認。アプリ認証情報の保存もX API通信も実施していない。投稿公開機能は本変更の範囲外。
 - 次: 文書更新の確認後に通常のPR・Pages手順を完了。課金なし指定に従い、費用が発生し得るプロバイダー呼び出しは承認まで実行しない。テスト投稿はしない。
+
+### 2026-10-04 16:15 JST - X OAuth公開・設定保存と最終引き継ぎ
+
+- 実施: PR #8の最終head `0cdefc22af5b46073d67a4d136b756cd37921c38`のCI成功後、16:02 JSTに通常のsquashマージ。main `6f07ef8dc14703557285b9380fc924d16c6197fc`のPages run https://github.com/MARUGO-s/sns_management/actions/runs/37184605009 は成功。
+- 本番設定: ブラウザ担当が16:05 JSTにClient IDと秘密情報をVaultから保護された入力で保存し、再読込を確認。秘密情報欄は空で保存済み表示、固定Callbackと`tweet.read tweet.write users.read offline.access`は正しい。X用のトークン手入力欄なし。状態は「設定保存済み・未接続（要確認）」。
+- 本番境界: 先行記録の加算migrationと3 Functions以外を再適用しない。6種の非SNS構造fingerprint一致、無関係のFunctions不変、秘密情報のブラウザロール権限拒否、JWT必須Functionsの未認証401を記録。本担当によるDB・Auth・Cloud Run・SNS API変更はなし。
+- 費用: XはPay Per Use。残高・無料クレジット・今回使用額は$0、カード未登録。$20無料クレジット案内は最初のカード登録が条件。本人識別APIの最終費用・必要クレジットは未確定。OAuth開始・本人認可・Callback・トークン交換・X API・カード登録・購入・自動チャージ・投稿は未実施。
+- 文書: `PROJECT_PROGRESS.md`、`AI_HANDOFF.md`、`docs/X_OAUTH.md`の現在状態を更新。許可済み手書きObsidianのX OAuth設計ノートとアーキテクチャ2件も更新、同時編集の競合0。アプリソース・生成知識は変更せず、構造再生成は不要。
+- 検証: `knowledge:check`の索引鮮度・生成物・Vault秘密値マーカー検査、知識モデルNode回帰2件、`git diff --check`に成功。PR #8マージとPages成功はGitHub CLIでも再確認。
+- Git: `docs/x-oauth-rollout-complete`を公開mainから作成。文書commit `cb2fc93`を保存し、最終完了ログも同ブランチで保存。通常のPR・CIへ提出し、mainへの直接pushやCI前マージは行わない。
+- Dropbox: `cb2fc93`のGit管理102ファイルを検査し、3文書更新・99既存一致、全102内容一致、競合0・削除0、進行記録一致を確認。無関係のミラー編集を保持し、`.git`・`.env*`・依存・build・索引作業出力は同期対象外。最終ログの追加文書も同じ安全な照合で再同期する。
+- 未完了: 本人認可、有効トークンの保存、実X接続確認。投稿公開と予約の自動実行は未実装。設定保存済みを接続済み・投稿機能完成と扱わない。
+- 次: 利用者が設定済みで接続保留か無料クレジット条件の確認かを判断するまで、費用が発生し得る操作を進めない。条件確認の選択だけではカード登録は承認されない。文書PRのCI結果を確認し、通常のマージで引き継ぎを確定する。

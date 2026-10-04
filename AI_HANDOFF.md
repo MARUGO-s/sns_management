@@ -87,9 +87,14 @@ published as recorded above. The earlier 102-file implementation tree was
 synchronized with 35 updates, 67 matches, zero conflicts/deletions.
 Final rollout documentation uses `docs/x-oauth-rollout-complete`, a docs-only
 branch from merge SHA `6f07ef8`. Submit it through normal PR/CI, never direct main
-push. The authorized source mirror must match this final Git-managed tree while
-preserving unrelated edits and excluding secrets, dependencies, builds and index
-outputs. No code or knowledge regeneration is needed for documentation-only
+push. Manual Obsidian X/architecture notes were updated with zero concurrency
+conflicts. Knowledge checks, the two knowledge-model Node regressions and diff
+whitespace checks passed. The authorized source mirror matched all 102 tracked
+files at closure commit `cb2fc93`: three document updates, 99 matches, zero
+conflicts/deletions, exact progress-file agreement. Final log additions are
+resynchronized using the same baseline/concurrency guards while preserving
+unrelated edits and excluding secrets, dependencies, builds and index outputs.
+No code or knowledge regeneration is needed for documentation-only
 changes. The unresolved user choice is hold the configured connection or inspect
 free-credit conditions; neither choice authorizes card registration. No test post.
 
