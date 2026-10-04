@@ -15,6 +15,21 @@ The exact SNS root URL is added to Auth redirects; gourmet Site URL and its thre
 Google OAuth is disabled on gourmet; the Google button requires an explicit build flag after provider setup.
 Prior sections below are historical and must not override this migration record.
 
+## 2026-10-04 operator UI redesign
+
+The operator and sign-in screens use a light violet/white workspace design in
+`app/social-design.css`, imported after `globals.css` and scoped to `.social-app`
+and `.social-auth`. The composer follows channel -> content/files -> schedule,
+with a local image/video and text preview. No publishing implementation was added.
+Status cards open the relevant post list; total schedule counts are independent
+of search. `app/lib/post-list.ts` combines query/status filtering without mutating
+the source list and sorts scheduled posts chronologically. The mobile menu closes
+on navigation or Escape. In-app navigation preserves the unsaved composer state;
+reloading does not persist it. See `docs/SOCIAL_UI.md` for the current workflow.
+UI verification uses synthetic data and an isolated harness outside this repo,
+with no production Auth session or database write. Never deploy that harness or
+introduce an authentication bypass into the production routes.
+
 ## Project
 
 Instatic TalksX is a Japanese social operations console for Instagram, TikTok, X, and Threads.

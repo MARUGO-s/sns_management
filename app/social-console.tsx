@@ -4,6 +4,7 @@ import { Button } from "@heroui/react";
 import type { User } from "@supabase/supabase-js";
 import {
   AlertCircle,
+  ArrowRight,
   BarChart3,
   Building2,
   CalendarDays,
@@ -16,12 +17,14 @@ import {
   EyeOff,
   FileText,
   History,
+  ImagePlus,
   Inbox,
   KeyRound,
   Link2,
   Loader2,
   LockKeyhole,
   LogOut,
+  Menu,
   Paperclip,
   Play,
   PlugZap,
@@ -37,6 +40,7 @@ import {
   Video,
   Wand2,
   XCircle,
+  X as CloseIcon,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -55,6 +59,7 @@ import MediaEditor, {
 } from "./media-editor";
 import VideoViewer from "./video-viewer";
 import { ChannelLogo, type ChannelId } from "./channel-logo";
+import { filterPosts, scheduledPosts, type PostFilter, type PostStatus } from "./lib/post-list";
 
 type ViewId =
   | "compose"
@@ -64,7 +69,7 @@ type ViewId =
   | "analytics"
   | "settings";
 type ApiStatus = "未設定" | "登録済み" | "入力確認済み" | "要確認";
-type RecordStatus = "下書き" | "予約済み" | "公開済み" | "失敗";
+type RecordStatus = PostStatus;
 
 type StoreRow = {
   id: string;
@@ -288,13 +293,24 @@ const defaultScopes: Record<ChannelId, string> = {
 };
 
 const views: Array<{ id: ViewId; label: string; icon: LucideIcon }> = [
-  { id: "compose", label: "投稿", icon: Send },
-  { id: "calendar", label: "予約", icon: CalendarDays },
-  { id: "history", label: "履歴", icon: History },
+  { id: "compose", label: "投稿を作成", icon: Send },
+  { id: "calendar", label: "予約一覧", icon: CalendarDays },
+  { id: "history", label: "投稿履歴", icon: History },
   { id: "inbox", label: "受信箱", icon: Inbox },
-  { id: "analytics", label: "分析", icon: BarChart3 },
-  { id: "settings", label: "連携", icon: PlugZap },
+  { id: "analytics", label: "運用集計", icon: BarChart3 },
+  { id: "settings", label: "SNS接続設定", icon: PlugZap },
 ];
+
+const viewDescriptions: Record<ViewId, string> = {
+  compose: "ひとつの画面から、複数のSNSへの投稿を準備。",
+  calendar: "これからの投稿を、公開予定の順に確認。",
+  history: "保存した投稿を検索して、内容やファイルを確認。",
+  inbox: "コメント・DMの取り込みは、今後の連携で利用できます。",
+  analytics: "このアプリに保存した投稿の状況を確認。",
+  settings: "SNSごとのAPI情報を登録・管理。",
+};
+
+const historyFilters: PostFilter[] = ["all", "予約済み", "下書き", "公開済み", "失敗"];
 
 const channelById = Object.fromEntries(
   channels.map((channel) => [channel.id, channel]),
@@ -393,6 +409,7 @@ export default function SocialConsole() {
     url: string;
   } | null>(null);
   const videoRequestId = useRef(0);
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
   const [activeIntegrationId, setActiveIntegrationId] =
     useState<ChannelId>("instagram");
   const [integrations, setIntegrations] = useState<
@@ -423,6 +440,7 @@ export default function SocialConsole() {
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [authPasswordVisible, setAuthPasswordVisible] = useState(false);
   const [authMessage, setAuthMessage] = useState(() => {
     const oauthError = readOAuthCallbackError();
     if (oauthError) clearAuthCallbackParams();
@@ -433,6 +451,27 @@ export default function SocialConsole() {
     text: string;
   } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [historyFilter, setHistoryFilter] = useState<PostFilter>("all");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  function openView(view: ViewId, filter: PostFilter = "all") {
+    setActiveView(view);
+    setSearchQuery("");
+    setHistoryFilter(filter);
+    setMobileMenuOpen(false);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setMobileMenuOpen(false);
+      mobileMenuButtonRef.current?.focus();
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -530,9 +569,6 @@ export default function SocialConsole() {
     }
     return Array.from(grouped.entries());
   }, [stores]);
-  const selectedHistory = history.find(
-    (record) => record.id === selectedHistoryId,
-  );
   const editingAttachment = attachedFiles.find(
     (file) => file.id === editingAttachmentId,
   );
@@ -544,25 +580,21 @@ export default function SocialConsole() {
   const registeredCount = useMemo(
     () =>
       channels.filter((channel) =>
-        ["登録済み", "入力確認済み"].includes(
-          integrations[channel.id].status,
-        ),
+        integrations[channel.id].status === "登録済み",
       ).length,
     [integrations],
   );
-  const filteredHistory = useMemo(() => {
-    const query = searchQuery.trim().toLocaleLowerCase("ja");
-    if (!query) return history;
-    return history.filter((record) =>
-      [record.title, record.body, record.owner, ...record.channels]
-        .join(" ")
-        .toLocaleLowerCase("ja")
-        .includes(query),
-    );
-  }, [history, searchQuery]);
-  const queue = filteredHistory.filter(
-    (record) => record.status === "予約済み",
+  const filteredHistory = useMemo(
+    () => filterPosts(history, searchQuery, historyFilter),
+    [history, searchQuery, historyFilter],
   );
+  const allScheduledPosts = useMemo(() => scheduledPosts(history), [history]);
+  const queue = filterPosts(allScheduledPosts, searchQuery);
+  const selectedHistory = filteredHistory.find((record) => record.id === selectedHistoryId)
+    ?? filteredHistory[0];
+  const draftCount = history.filter((record) => record.status === "下書き").length;
+  const failedCount = history.filter((record) => record.status === "失敗").length;
+  const firstPreviewFile = attachedFiles.find((file) => /^(image|video)\//.test(file.type));
   const analytics = useMemo(() => {
     const total = history.length;
     const scheduled = history.filter(
@@ -1029,7 +1061,7 @@ export default function SocialConsole() {
         name: file.name,
         size: file.size,
         type: file.type || "application/octet-stream",
-        previewUrl: file.type.startsWith("video/")
+        previewUrl: /^(image|video)\//.test(file.type)
           ? URL.createObjectURL(file)
           : "",
         crop: null,
@@ -1641,7 +1673,7 @@ export default function SocialConsole() {
 
   if (authLoading) {
     return (
-      <main className="auth-shell">
+      <main className="auth-shell social-auth">
         <Loader2 className="spin" aria-hidden="true" size={28} />
         <p>安全な接続を確認しています</p>
       </main>
@@ -1650,7 +1682,7 @@ export default function SocialConsole() {
 
   if (!supabase) {
     return (
-      <main className="auth-shell">
+      <main className="auth-shell social-auth">
         <section className="auth-panel">
           <div className="brand-mark">IX</div>
           <h1>設定が必要です</h1>
@@ -1662,13 +1694,31 @@ export default function SocialConsole() {
 
   if (!user) {
     return (
-      <main className="auth-shell">
+      <main className="auth-shell social-auth social-auth--split">
+        <section className="auth-intro" aria-label="アプリについて">
+          <div className="auth-intro-brand"><div className="brand-mark">IX</div><h1>Instatic TalksX</h1></div>
+          <div className="auth-intro-copy">
+            <p className="eyebrow">YOUR SOCIAL WORKSPACE</p>
+            <h2>SNSの運用を、<br />ひとつの場所で。</h2>
+            <p>投稿をつくる。予定を整える。<br />店舗の発信を、もっとスムーズに。</p>
+            <div className="auth-channel-row">
+              {channels.map((channel) => (
+                <div key={channel.id}><ChannelLogo channel={channel.id} /><span>{channel.label}</span></div>
+              ))}
+            </div>
+            <div className="auth-feature-list">
+              <span><CheckCircle2 size={16} aria-hidden="true" />複数SNSの投稿をまとめて準備</span>
+              <span><CheckCircle2 size={16} aria-hidden="true" />予約・履歴・ファイルを店舗ごとに管理</span>
+            </div>
+          </div>
+          <p className="auth-intro-footer">MARUGO GROUP · SOCIAL OPERATIONS</p>
+        </section>
         <section className="auth-panel">
           <div className="auth-brand">
             <div className="brand-mark">IX</div>
             <div>
               <p className="eyebrow">SNS Ops Console</p>
-              <h1>Instatic TalksX</h1>
+              <p className="auth-short-title">Instatic TalksX</p>
             </div>
           </div>
           <div className="auth-heading">
@@ -1724,22 +1774,31 @@ export default function SocialConsole() {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 autoComplete="email"
+                placeholder="メールアドレスを入力"
                 required
               />
             </label>
-            <label>
-              <span>パスワード</span>
+            <div className="auth-password-field">
+              <label htmlFor="auth-password">パスワード</label>
+              <div className="auth-password-input">
               <input
-                type="password"
+                id="auth-password"
+                type={authPasswordVisible ? "text" : "password"}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 autoComplete={
                   authMode === "signin" ? "current-password" : "new-password"
                 }
                 minLength={authMode === "signup" ? 12 : undefined}
+                placeholder={authMode === "signup" ? "12文字以上で設定" : "パスワードを入力"}
                 required
               />
-            </label>
+              <button type="button" aria-label={authPasswordVisible ? "パスワードを隠す" : "パスワードを表示"}
+                aria-pressed={authPasswordVisible} onClick={() => setAuthPasswordVisible((visible) => !visible)}>
+                {authPasswordVisible ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+              </button>
+              </div>
+            </div>
             {authMessage && <p className="auth-message">{authMessage}</p>}
             <Button
               className="primary-button"
@@ -1763,6 +1822,7 @@ export default function SocialConsole() {
                   current === "signin" ? "signup" : "signin",
                 );
                 setAuthMessage("");
+                setAuthPasswordVisible(false);
               }}
             >
               {authMode === "signin"
@@ -1780,7 +1840,7 @@ export default function SocialConsole() {
 
   if (storeSelectionRequired) {
     return (
-      <main className="auth-shell">
+      <main className="auth-shell social-auth">
         <section className="auth-panel store-onboarding-panel">
           <div className="auth-brand">
             <div className="brand-mark">IX</div>
@@ -1843,16 +1903,26 @@ export default function SocialConsole() {
 
   return (
     <>
-      <main className="app-shell">
-      <aside className="sidebar" aria-label="SNS管理メニュー">
+      <main className="app-shell social-app">
+      <a className="skip-link" href="#social-workspace">作業画面へ移動</a>
+      <aside className={`sidebar ${mobileMenuOpen ? "is-open" : ""}`} aria-label="SNS管理メニュー">
+        <div className="sidebar-brand-row">
         <div className="brand-lockup">
           <div className="brand-mark">IX</div>
           <div>
-            <p className="eyebrow">SNS Ops Console</p>
+            <p className="eyebrow">MARUGO · SNS WORKSPACE</p>
             <h1>Instatic TalksX</h1>
           </div>
         </div>
+        <button className="icon-button mobile-menu-toggle" type="button" aria-expanded={mobileMenuOpen}
+          ref={mobileMenuButtonRef}
+          aria-controls="social-navigation" aria-label={mobileMenuOpen ? "メニューを閉じる" : "メニューを開く"}
+          onClick={() => setMobileMenuOpen((open) => !open)}>
+          {mobileMenuOpen ? <CloseIcon size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
+        </button>
+        </div>
 
+        <div className="sidebar-content" id="social-navigation">
         <div className="store-context" aria-label="現在の店舗">
           <Building2 aria-hidden="true" size={17} />
           <div>
@@ -1861,6 +1931,10 @@ export default function SocialConsole() {
           </div>
         </div>
 
+        <button className="sidebar-create" type="button" onClick={() => openView("compose")}>
+          <Plus size={18} aria-hidden="true" /><span>投稿を作成</span>
+        </button>
+        <p className="nav-section-label">ワークスペース</p>
         <nav className="view-tabs" aria-label="表示切り替え">
           {views.map((view) => {
             const Icon = view.icon;
@@ -1871,11 +1945,13 @@ export default function SocialConsole() {
                   activeView === view.id ? "view-tab active" : "view-tab"
                 }
                 type="button"
-                onClick={() => setActiveView(view.id)}
+                onClick={() => openView(view.id)}
                 aria-pressed={activeView === view.id}
               >
                 <Icon aria-hidden="true" size={18} />
                 <span>{view.label}</span>
+                {view.id === "calendar" && allScheduledPosts.length > 0 && <span className="nav-count">{allScheduledPosts.length}</span>}
+                {view.id === "inbox" && <small className="nav-soon">準備中</small>}
               </button>
             );
           })}
@@ -1889,17 +1965,16 @@ export default function SocialConsole() {
 
         <section className="account-stack" aria-label="接続アカウント">
           <div className="section-title">
-            <ShieldCheck aria-hidden="true" size={17} />
-            <span>接続アカウント</span>
+            <span>SNSアカウント</span><small>{registeredCount}/{channels.length} 登録済み</small>
           </div>
           {channels.map((channel) => (
             <button
-              className="account-row"
+              className={`account-row ${activeView === "settings" && activeIntegrationId === channel.id ? "active" : ""}`}
               key={channel.id}
               type="button"
               onClick={() => {
                 setActiveIntegrationId(channel.id);
-                setActiveView("settings");
+                openView("settings");
               }}
             >
               <ChannelLogo channel={channel.id} />
@@ -1907,7 +1982,7 @@ export default function SocialConsole() {
                 <strong>{channel.label}</strong>
                 <small>API設定</small>
               </span>
-              <span className="account-health">
+              <span className={`account-health ${getStatusTone(integrations[channel.id].status)}`}>
                 {integrations[channel.id].status}
               </span>
             </button>
@@ -1917,7 +1992,7 @@ export default function SocialConsole() {
         <div className="user-panel">
           <div>
             <strong>{user.email}</strong>
-            <small>{currentStore?.name ?? "店舗未設定"} / Supabaseで保護</small>
+            <small>{currentStore?.name ?? "店舗未設定"}</small>
           </div>
           <button
             className="icon-button"
@@ -1928,13 +2003,14 @@ export default function SocialConsole() {
             <LogOut aria-hidden="true" size={17} />
           </button>
         </div>
+        </div>
       </aside>
 
-      <section className="workspace">
+      <section className="workspace" id="social-workspace" tabIndex={-1}>
         <header className="topbar">
           <div>
             <p className="eyebrow">
-              {currentStore?.name ?? "店舗未設定"} / 本日の運用
+              ワークスペース / {currentStore?.name ?? "店舗未設定"}
             </p>
             <h2>
               {activeView === "compose" && "投稿を作成"}
@@ -1944,21 +2020,25 @@ export default function SocialConsole() {
               {activeView === "analytics" && "運用集計"}
               {activeView === "settings" && "連携設定"}
             </h2>
+            <p className="view-description">{viewDescriptions[activeView]}</p>
           </div>
           <div className="topbar-actions">
-            <label className="search-box">
+            {(activeView === "history" || activeView === "calendar") && <div className="search-box">
               <Search aria-hidden="true" size={17} />
-              <span className="sr-only">検索</span>
+              <span className="sr-only">投稿を検索</span>
               <input
-                placeholder="投稿本文を検索"
+                aria-label="投稿を検索"
+                placeholder="投稿・担当者・SNSを検索"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
               />
-            </label>
+              {searchQuery && <button type="button" aria-label="検索をクリア" onClick={() => setSearchQuery("")}><CloseIcon size={15} aria-hidden="true" /></button>}
+            </div>}
             <button
               className="icon-button"
               type="button"
-              aria-label="同期"
+              aria-label="最新の情報に更新"
+              title="最新の情報に更新"
               onClick={() => void loadWorkspaceData(user)}
               disabled={dataLoading}
             >
@@ -1968,18 +2048,9 @@ export default function SocialConsole() {
                 size={18}
               />
             </button>
-            <button
-              className={
-                activeView === "settings"
-                  ? "icon-button active-icon"
-                  : "icon-button"
-              }
-              type="button"
-              aria-label="連携設定"
-              onClick={() => setActiveView("settings")}
-            >
-              <Settings2 aria-hidden="true" size={18} />
-            </button>
+            {activeView !== "compose" && <button className="primary-button topbar-create" type="button" onClick={() => openView("compose")}>
+              <Plus aria-hidden="true" size={17} /><span>投稿を作成</span>
+            </button>}
           </div>
         </header>
 
@@ -2003,36 +2074,26 @@ export default function SocialConsole() {
           </div>
         )}
 
-        <section className="status-strip" aria-label="運用状況">
-          <div>
-            <span>保存済み</span>
-            <strong>{history.length}件</strong>
-          </div>
-          <div>
-            <span>予約中</span>
-            <strong>{queue.length}件</strong>
-          </div>
-          <div>
-            <span>保存先</span>
-            <strong>Supabase</strong>
-          </div>
-          <div>
-            <span>API設定</span>
-            <strong>
-              {registeredCount === channels.length
-                ? "完了"
-                : `${registeredCount}/${channels.length}`}
-            </strong>
-          </div>
-        </section>
+        {["compose", "calendar", "history"].includes(activeView) && <section className="status-strip" aria-label="運用状況" aria-busy={dataLoading}>
+          {[
+            { label: "保存した投稿", value: history.length, icon: FileText, filter: "all" as PostFilter, view: "history" as ViewId },
+            { label: "予約中", value: allScheduledPosts.length, icon: CalendarDays, filter: "all" as PostFilter, view: "calendar" as ViewId },
+            { label: "下書き", value: draftCount, icon: History, filter: "下書き" as PostFilter, view: "history" as ViewId },
+            { label: "要確認", value: failedCount, icon: AlertCircle, filter: "失敗" as PostFilter, view: "history" as ViewId },
+          ].map((item) => <button type="button" className={`status-card ${item.filter === "失敗" && item.value ? "needs-attention" : ""}`} key={item.label}
+            onClick={() => openView(item.view, item.filter)} aria-label={`${item.label} ${dataLoading ? "読み込み中" : `${item.value}件`}を表示`}>
+            <span className="stat-label"><item.icon size={17} aria-hidden="true" />{item.label}</span>
+            <strong>{dataLoading ? "—" : item.value}<small>件</small></strong><ArrowRight size={16} className="stat-arrow" aria-hidden="true" />
+          </button>)}
+        </section>}
 
         {activeView === "compose" && (
           <section className="compose-layout" aria-label="投稿作成">
             <div className="composer-panel">
               <div className="panel-heading">
                 <div>
-                  <p className="eyebrow">Composer</p>
-                  <h3>予約投稿を保存</h3>
+                  <p className="eyebrow">NEW POST</p>
+                  <h3>新しい投稿</h3>
                 </div>
                 <button
                   className="ghost-button"
@@ -2044,6 +2105,23 @@ export default function SocialConsole() {
                 </button>
               </div>
 
+              <div className="compose-step-heading"><span>1</span><h4>投稿先を選ぶ</h4><small>複数選択できます</small></div>
+              <div className="channel-toggle-grid" aria-label="投稿先">
+                {channels.map((channel) => (
+                  <button
+                    key={channel.id}
+                    type="button"
+                    className={selectedChannels.includes(channel.id) ? `channel-toggle ${channel.tone} active` : `channel-toggle ${channel.tone}`}
+                    onClick={() => toggleChannel(channel.id)}
+                    aria-pressed={selectedChannels.includes(channel.id)}
+                  >
+                    <ChannelLogo channel={channel.id} />
+                    <span><strong>{channel.label}</strong><small>{integrations[channel.id].status}</small></span>
+                    {selectedChannels.includes(channel.id) && <CheckCircle2 aria-hidden="true" size={18} />}
+                  </button>
+                ))}
+              </div>
+              <div className="compose-step-heading"><span>2</span><h4>投稿内容をつくる</h4></div>
               <label className="field-label" htmlFor="post-copy">
                 投稿本文
               </label>
@@ -2052,19 +2130,17 @@ export default function SocialConsole() {
                 value={postText}
                 onChange={(event) => setPostText(event.target.value)}
                 maxLength={2200}
-                placeholder="投稿する内容を入力"
+                placeholder="新メニューのお知らせ、今日のおすすめ、店舗の近況など…"
               />
               <div className="field-meta">
-                <span>{postText.length}/2200</span>
-                <span>
-                  {selectedLabels.join(" / ") || "投稿先未選択"}
-                </span>
+                <span>本文は2,200文字まで</span>
+                <span>{postText.length.toLocaleString()}/2,200</span>
               </div>
 
               <div className="file-upload-row">
                 <label className="file-upload-button">
-                  <Paperclip aria-hidden="true" size={17} />
-                  <span>ファイルを添付</span>
+                  <ImagePlus aria-hidden="true" size={20} />
+                  <span><strong>画像・動画・ファイルを添付</strong><small>クリックしてファイルを選択</small></span>
                   <input
                     type="file"
                     accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx"
@@ -2142,34 +2218,10 @@ export default function SocialConsole() {
                 </>
               )}
 
-              <div className="channel-toggle-grid" aria-label="投稿先">
-                {channels.map((channel) => (
-                  <button
-                    key={channel.id}
-                    type="button"
-                    className={
-                      selectedChannels.includes(channel.id)
-                        ? `channel-toggle ${channel.tone} active`
-                        : `channel-toggle ${channel.tone}`
-                    }
-                    onClick={() => toggleChannel(channel.id)}
-                    aria-pressed={selectedChannels.includes(channel.id)}
-                  >
-                    <ChannelLogo channel={channel.id} />
-                    <span>
-                      <strong>{channel.label}</strong>
-                      <small>{integrations[channel.id].status}</small>
-                    </span>
-                    {selectedChannels.includes(channel.id) && (
-                      <CheckCircle2 aria-hidden="true" size={18} />
-                    )}
-                  </button>
-                ))}
-              </div>
-
+              <div className="compose-step-heading"><span>3</span><h4>公開予定を決める</h4></div>
               <div className="schedule-row">
                 <label>
-                  <span>公開予定</span>
+                  <span>公開予定日時（端末の現地時間）</span>
                   <input
                     type="datetime-local"
                     min={toDateTimeLocalValue(new Date())}
@@ -2189,45 +2241,37 @@ export default function SocialConsole() {
                   ) : (
                     <Plus aria-hidden="true" size={18} />
                   )}
-                  <span>予約として保存</span>
+                  <span>{savingPost ? "保存しています…" : "予約を保存"}</span>
                 </Button>
               </div>
+              <p className="publishing-note"><AlertCircle size={15} aria-hidden="true" />予約内容を保存します。SNSへの自動公開は準備中です。</p>
             </div>
 
-            <aside className="preview-panel" aria-label="保存内容">
-              <div className="storage-summary">
-                <Database aria-hidden="true" size={24} />
-                <div>
-                  <p className="eyebrow">Protected storage</p>
-                  <h3>Supabaseへ保存</h3>
+            <aside className="preview-panel" aria-label="投稿内容の確認">
+              <div className="panel-heading"><div><p className="eyebrow">LIVE PREVIEW</p><h3>投稿内容の確認</h3></div><Eye size={19} aria-hidden="true" /></div>
+              <div className="post-preview-card">
+                <div className="post-preview-account"><span className="preview-avatar"><Building2 size={21} aria-hidden="true" /></span>
+                  <div><strong>{currentStore?.name ?? "店舗未設定"}</strong><small>{selectedLabels.join(" / ") || "投稿先を選択してください"}</small></div>
                 </div>
-                <dl>
-                  <div>
-                    <dt>本文・履歴</dt>
-                    <dd>Database</dd>
-                  </div>
-                  <div>
-                    <dt>画像・動画</dt>
-                    <dd>Private Storage</dd>
-                  </div>
-                  <div>
-                    <dt>アクセス</dt>
-                    <dd
-                      className={
-                        user
-                          ? "storage-access authenticated"
-                          : "storage-access"
-                      }
-                      aria-live="polite"
-                    >
-                      {user && (
-                        <CheckCircle2 aria-hidden="true" size={15} />
-                      )}
-                      <span>{user ? "認証済み" : "ログイン必須"}</span>
-                    </dd>
-                  </div>
-                </dl>
+                <div className={`post-preview-media ${firstPreviewFile ? "has-media" : ""}`}>
+                  {firstPreviewFile?.type.startsWith("image/") ? (
+                    // Local object URLs preserve private file bytes in the browser.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={firstPreviewFile.previewUrl} alt="添付画像のプレビュー" />
+                  ) : firstPreviewFile?.type.startsWith("video/") ? (
+                    <video src={firstPreviewFile.previewUrl} controls playsInline preload="metadata" aria-label="添付動画のプレビュー" />
+                  ) : <><ImagePlus size={32} strokeWidth={1.3} aria-hidden="true" /><p>写真や動画で、<br />伝わる投稿に。</p></>}
+                </div>
+                <p className={`post-preview-body ${postText.trim() ? "" : "is-placeholder"}`}>{postText.trim() || "入力した投稿本文がここに表示されます。"}</p>
+                {attachedFiles.length > 1 && <p className="preview-file-count"><Paperclip size={14} aria-hidden="true" />添付ファイル {attachedFiles.length}件</p>}
               </div>
+              <dl className="preview-details">
+                <div><dt>投稿先</dt><dd>{selectedLabels.join("・") || "未選択"}</dd></div>
+                <div><dt>公開予定</dt><dd>{scheduledAt ? formatDateTime(scheduledAt) : "未設定"}</dd></div>
+                <div><dt>添付</dt><dd>{attachedFiles.length}ファイル</dd></div>
+              </dl>
+              <p className="preview-caption">内容確認用のプレビューです。SNS上の実際の表示とは異なります。動画編集の結果は保存後に履歴で確認できます。</p>
+              <p className="private-file-note"><ShieldCheck size={15} aria-hidden="true" />ファイルは非公開で保存されます</p>
             </aside>
           </section>
         )}
@@ -2243,7 +2287,7 @@ export default function SocialConsole() {
                 <span className="count-pill">{queue.length}件</span>
               </div>
               <div className="queue-list">
-                {queue.length ? (
+                {dataLoading ? <div className="empty-state"><Loader2 size={24} className="spin" aria-hidden="true" /><p>予約を読み込んでいます…</p></div> : queue.length ? (
                   queue.map((post) => (
                     <article className="queue-card" key={post.id}>
                       <div className="queue-time">
@@ -2284,8 +2328,11 @@ export default function SocialConsole() {
                 ) : (
                   <div className="empty-state">
                     <CalendarDays aria-hidden="true" size={24} />
-                    <h3>予約投稿はありません</h3>
-                    <p>投稿画面から予約内容を保存すると、ここに表示されます。</p>
+                    <h3>{searchQuery ? "条件に合う予約がありません" : "次の投稿を準備しましょう"}</h3>
+                    <p>{searchQuery ? "別のキーワードで検索してください。" : "投稿を作成して予定を保存すると、ここに表示されます。"}</p>
+                    <button className="primary-button" type="button" onClick={() => searchQuery ? setSearchQuery("") : openView("compose")}>
+                      {searchQuery ? "検索をクリア" : "投稿を作成"}<ArrowRight size={16} aria-hidden="true" />
+                    </button>
                   </div>
                 )}
               </div>
@@ -2293,23 +2340,23 @@ export default function SocialConsole() {
             <aside className="approval-panel">
               <div className="section-title">
                 <ShieldCheck aria-hidden="true" size={17} />
-                <span>運用状態</span>
+                <span>予約について</span>
               </div>
               <div className="approval-step done">
                 <CheckCircle2 aria-hidden="true" size={17} />
-                <span>ログイン認証</span>
+                <span>日時・本文・添付をまとめて保存</span>
               </div>
               <div className="approval-step done">
                 <CheckCircle2 aria-hidden="true" size={17} />
-                <span>履歴の永続保存</span>
+                <span>キャンセルした予約は下書きへ</span>
               </div>
               <div className="approval-step done">
                 <CheckCircle2 aria-hidden="true" size={17} />
-                <span>非公開ファイル保存</span>
+                <span>下書きは履歴から再予約できます</span>
               </div>
               <div className="approval-step current">
                 <AlertCircle aria-hidden="true" size={17} />
-                <span>SNS公開処理はAPI審査後</span>
+                <span>SNSへの自動公開は準備中です</span>
               </div>
             </aside>
           </section>
@@ -2321,23 +2368,28 @@ export default function SocialConsole() {
               <div className="panel-heading">
                 <div>
                   <p className="eyebrow">Archive</p>
-                  <h3>過去の投稿</h3>
+                  <h3>保存した投稿</h3>
                 </div>
                 <span className="count-pill">
                   {filteredHistory.length}件
                 </span>
               </div>
+              <div className="history-filter-bar" role="group" aria-label="投稿の状態で絞り込み">
+                {historyFilters.map((filter) => <button type="button" key={filter} className={historyFilter === filter ? "active" : ""}
+                  aria-pressed={historyFilter === filter} onClick={() => setHistoryFilter(filter)}>{filter === "all" ? "すべて" : filter}</button>)}
+              </div>
               <div className="history-list">
-                {filteredHistory.length ? (
+                {dataLoading ? <div className="empty-state"><Loader2 size={24} className="spin" aria-hidden="true" /><p>履歴を読み込んでいます…</p></div> : filteredHistory.length ? (
                   filteredHistory.map((record) => (
                     <button
                       className={
-                        selectedHistoryId === record.id
+                        selectedHistory?.id === record.id
                           ? "history-card active"
                           : "history-card"
                       }
                       key={record.id}
                       type="button"
+                      aria-pressed={selectedHistory?.id === record.id}
                       onClick={() => {
                         setSelectedHistoryId(record.id);
                         setRescheduleAt(
@@ -2366,7 +2418,7 @@ export default function SocialConsole() {
                       </div>
                       <span
                         className={`status-pill ${
-                          record.status === "失敗" ? "warning" : "ready"
+                          record.status === "失敗" ? "warning" : record.status === "下書き" ? "idle" : "ready"
                         }`}
                       >
                         {record.status}
@@ -2376,7 +2428,11 @@ export default function SocialConsole() {
                 ) : (
                   <div className="empty-state compact">
                     <History aria-hidden="true" size={22} />
-                    <p>保存済みの投稿はありません。</p>
+                    <h3>{searchQuery || historyFilter !== "all" ? "条件に合う投稿がありません" : "まだ投稿がありません"}</h3>
+                    <p>{searchQuery || historyFilter !== "all" ? "検索や絞り込みを変更してください。" : "最初の投稿を作成して、予定を保存しましょう。"}</p>
+                    <button className="ghost-button" type="button" onClick={() => searchQuery || historyFilter !== "all" ? openView("history") : openView("compose")}>
+                      {searchQuery || historyFilter !== "all" ? "絞り込みをクリア" : "投稿を作成"}<ArrowRight size={16} aria-hidden="true" />
+                    </button>
                   </div>
                 )}
               </div>
@@ -2581,7 +2637,7 @@ export default function SocialConsole() {
                   </div>
                 </>
               ) : (
-                <p className="empty-note">履歴を選択してください。</p>
+                <div className="empty-state compact"><FileText size={24} aria-hidden="true" /><p>投稿を選ぶと、詳細がここに表示されます。</p></div>
               )}
             </aside>
           </section>
@@ -2680,6 +2736,7 @@ export default function SocialConsole() {
                   </button>
                 ))}
               </div>
+              <p className="connection-help">SNSを選んでAPI情報を登録してください。情報を登録しても、SNSへの自動公開はまだ行われません。</p>
             </aside>
 
             <section className="integration-editor-panel">
@@ -2917,26 +2974,6 @@ export default function SocialConsole() {
               </div>
             </section>
 
-            <aside className="integration-summary-panel">
-              <div className="section-title">
-                <PlugZap aria-hidden="true" size={17} />
-                <span>登録状況</span>
-              </div>
-              {channels.map((channel) => (
-                <div className="summary-row" key={`summary-${channel.id}`}>
-                  <ChannelLogo channel={channel.id} />
-                  <div>
-                    <strong>{channel.label}</strong>
-                    <small>{integrations[channel.id].status}</small>
-                  </div>
-                  <span
-                    className={`connection-dot ${getStatusTone(
-                      integrations[channel.id].status,
-                    )}`}
-                  />
-                </div>
-              ))}
-            </aside>
           </section>
         )}
         </section>
