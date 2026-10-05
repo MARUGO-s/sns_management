@@ -1,5 +1,37 @@
 # Instatic TalksX Handoff
 
+## Current X scheduled-publishing status
+
+The user authorized continuing the X scheduled-post feature locally. The
+uncommitted branch `feat/x-scheduled-publishing` adds an X-only queue, protected
+worker, explicit user confirmation, cancellation, and duplicate-safe
+state handling. It is not merged or deployed. Its additive migration defaults
+the runtime marker to `enabled=false`; there is no Cron job or worker secret.
+Do not claim production scheduled posting is available or perform production
+database/Function/scheduler changes without a separately reviewed activation.
+
+Local verification after installing Deno: Node suite 53/53; scheduler Deno
+tests 13/13 and worker type check; existing X publisher Deno tests 31/31 and
+type check; isolated PostgreSQL permissions/state and independent-connection
+claim/cancel/enqueue plus dispatch/stale-sweep NOWAIT races; TypeScript; and
+GitHub Pages static build. Lint has no errors and one existing React Hook
+dependency warning. The code-only Graphify and generated Dropbox AI environment
+were previously refreshed (709 nodes, 999 edges, 59 communities), but the latest
+scheduling diff makes the generated graph stale; rerun `knowledge:update` and
+`knowledge:check` before closure. Handwritten Vault design notes were not
+changed. Independent read-only review found no critical code blocker, and
+confirmed the reservation-state read-failure guard fix with no new release
+blocker. This is not production verification. No real X/Provider call, post,
+upload, token refresh, OAuth, billing change, production migration, Function,
+Auth, or Cloud Run operation occurred.
+
+The worker processes at most one due reservation per invocation. Select a
+periodic trigger before production: Supabase Cron is the recommended option;
+GitHub Actions is an alternative with its own runner and timing dependencies.
+This choice is not yet confirmed. See `docs/X_SCHEDULING.md` and the current
+schedule entry at the top of `PROJECT_PROGRESS.md`. Do not enable publication
+before the user is shown which pending posts could be sent and when.
+
 ## 2026-10-04 20:44 JST media configuration saved but not connected (current connection)
 
 Following the user's separate 20:37:55 JST approval, the browser worker saved
@@ -206,10 +238,11 @@ zero charge. Private billing amounts and payment data do not belong in public
 Git or knowledge notes. Free-credit authorization is not permission to buy
 credits, enable recharge, or add unrelated API usage.
 
-Publishing, scheduled execution, DM, comments, analytics, and webhooks remain
+The user later requested scheduled X publishing; its current local implementation
+status is documented above. DM, comments, analytics, and webhooks remain
 unimplemented. Live token refresh, expiry, cancellation, and reauthorization
 were not exercised. Do not repeat authorization or send test posts merely for
-verification. Further publishing/API work requires a new user instruction.
+verification.
 The backend is already deployed: do not reapply migration/Functions or modify
 shared DB/Auth, Cloud Run, or unrelated secrets. This closure changes only
 three repository documents and two manual Obsidian notes, with no structural

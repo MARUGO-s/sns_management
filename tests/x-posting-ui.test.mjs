@@ -36,6 +36,73 @@ test("manual X validation only permits four small images or one conservative-siz
   }
 });
 
+test("X auto-schedule validation is opt-in-only, connection-gated, X-only, and original-media-only", () => {
+  const base = { channels: ["x"], text: "予約投稿", files: [], connected: true, canPublish: true, mediaWrite: true };
+  assert.equal(helpers.validateXScheduledPost(base).valid, true);
+  assert.equal(helpers.validateXScheduledPost({ ...base, channels: ["x", "instagram"] }).valid, false);
+  assert.equal(helpers.validateXScheduledPost({ ...base, channels: ["instagram"] }).valid, false);
+  assert.equal(helpers.validateXScheduledPost({ ...base, connected: false }).valid, false);
+  assert.equal(helpers.validateXScheduledPost({ ...base, canPublish: false }).valid, false);
+  assert.equal(helpers.validateXScheduledPost({ ...base, text: "あ".repeat(141) }).valid, false);
+  assert.equal(helpers.validateXScheduledPost({
+    ...base, files: [{ id: "crop", name: "video.mp4", type: "video/mp4", size: 10, hasCrop: true }],
+  }).valid, false);
+  assert.equal(helpers.validateXScheduledPost({ ...base, mediaWrite: false,
+    files: [{ id: "image", name: "image.png", type: "image/png", size: 10 }] }).valid, false);
+  assert.equal(helpers.validateXScheduledPost({ ...base,
+    files: [{ id: "image", name: "image.png", type: "image/png", size: helpers.xImageLimit + 1 }] }).valid, false);
+});
+
+test("scheduled-publication status accepts only safe known fields/states", () => {
+  assert.deepEqual(helpers.parseXScheduledPublication({
+    post_id: "00000000-0000-0000-0000-000000000001", state: "queued",
+    error_code: null, scheduled_at: "2026-10-05T01:00:00.000Z",
+  }), {
+    postId: "00000000-0000-0000-0000-000000000001", state: "queued",
+    errorCode: null, scheduledAt: "2026-10-05T01:00:00.000Z",
+  });
+  assert.equal(helpers.parseXScheduledPublication({ post_id: "post", state: "queued" }), null);
+  assert.deepEqual(helpers.parseXScheduledPublication({
+    post_id: "00000000-0000-0000-0000-000000000001", state: "token_leaked",
+    error_code: null, scheduled_at: null,
+  }), {
+    postId: "00000000-0000-0000-0000-000000000001", state: "unknown",
+    errorCode: null, scheduledAt: null,
+  });
+  assert.equal(helpers.parseXScheduledPublication({
+    post_id: "00000000-0000-0000-0000-000000000001", state: "<script>",
+    error_code: null, scheduled_at: null,
+  }), null);
+  assert.equal(helpers.xScheduleStateLabel("queued"), "X自動公開の予約中");
+  assert.match(
+    helpers.xScheduleErrorMessage("schedule_media_checkpoint_incomplete"),
+    /自動再試行を停止しました.*投稿リクエストは送信前.*メディアがX側に作成されている可能性/,
+  );
+  assert.match(helpers.xScheduleErrorMessage("schedule_attempt_limit"), /確認回数上限/);
+  assert.equal(helpers.xScheduleErrorMessage(null), null);
+  assert.match(helpers.xScheduleErrorMessage("unexpected"), /状態を確認してください/);
+});
+
+test("only a definitive PostgreSQL rollback is classified as a known X enqueue failure", () => {
+  assert.equal(
+    helpers.xScheduleKnownEnqueueFailure({ code: "P0001", message: "schedule_not_ready" }),
+    "schedule_not_ready",
+  );
+  assert.equal(
+    helpers.xScheduleKnownEnqueueFailure({ code: "P0001", message: "schedule_cancelled" }),
+    "schedule_cancelled",
+  );
+  assert.equal(
+    helpers.xScheduleKnownEnqueueFailure({ code: "PGRST000", message: "schedule_not_ready" }),
+    null,
+  );
+  assert.equal(
+    helpers.xScheduleKnownEnqueueFailure({ code: "P0001", message: "connection refused" }),
+    null,
+  );
+  assert.equal(helpers.xScheduleKnownEnqueueFailure(new Error("network timeout")), null);
+});
+
 test("publication locks and result parsing never trust token fields, errors, or remote URLs", () => {
   for (const state of ["preparing", "sending", "unknown", "published"]) {
     assert.equal(helpers.xAttemptLocksPost({ state }), true);
@@ -86,10 +153,23 @@ const syntheticRecord = {
   channels: ["x", "instagram"], status: "下書き", owner: "Synthetic", format: "Post", savedAt: "",
   files: [],
 };
-async function renderConsole({ view = "compose", state, viewer = false, confirmation = false } = {}) {
-  const attempt = state ? {
+async function renderConsole({
+  view = "compose", state, attemptState = null, viewer = false, confirmation = false,
+  scheduledState = null, localScheduleState = null, scheduleErrorCode = null, ordinaryScheduled = false,
+  scheduleReady = false, scheduleStatusAvailable = true,
+} = {}) {
+  const record = {
+    ...syntheticRecord,
+    status: scheduledState || ordinaryScheduled ? "予約済み" : syntheticRecord.status,
+    channels: scheduledState || localScheduleState ? ["x"] : syntheticRecord.channels,
+    xScheduleState: scheduledState ?? localScheduleState,
+    xScheduleErrorCode: scheduleErrorCode,
+  };
+  const activeAttemptState = attemptState ?? state;
+  const attempt = activeAttemptState ? {
     id: "attempt", post_id: "post", workspace_id: "workspace", request_id: "stable-request",
-    state, remote_post_id: state === "published" ? "123" : null, error_code: null, created_at: "", updated_at: "",
+    state: activeAttemptState, remote_post_id: activeAttemptState === "published" ? "123" : null,
+    error_code: null, created_at: "", updated_at: "",
   } : null;
   const server = await createServer({
     root: fileURLToPath(new URL("..", import.meta.url)),
@@ -106,11 +186,17 @@ async function renderConsole({ view = "compose", state, viewer = false, confirma
           ['useState<User | null>(null)', 'useState<User | null>({ id: "synthetic-user" } as User)'],
           ['useState(Boolean(supabase))', 'useState(false)'],
           ['const [canPublishX, setCanPublishX] = useState(false);', `const [canPublishX, setCanPublishX] = useState(${!viewer});`],
+          ['const [xScheduleReady, setXScheduleReady] = useState(false);',
+            `const [xScheduleReady, setXScheduleReady] = useState(${scheduleReady});`],
+          ['const [xScheduleStatusAvailable, setXScheduleStatusAvailable] = useState(false);',
+            `const [xScheduleStatusAvailable, setXScheduleStatusAvailable] = useState(${scheduleStatusAvailable});`],
+          ['const [xOAuthServer, setXOAuthServer] = useState<"unknown" | "checking" | "ready" | "unavailable">("unknown");',
+            'const [xOAuthServer, setXOAuthServer] = useState<"unknown" | "checking" | "ready" | "unavailable">("ready");'],
           ['const [xAttemptsLoaded, setXAttemptsLoaded] = useState(false);', 'const [xAttemptsLoaded, setXAttemptsLoaded] = useState(true);'],
           ['useState<ChannelId[]>([])', 'useState<ChannelId[]>(["x"])'],
           ['const [postText, setPostText] = useState("");', 'const [postText, setPostText] = useState("Synthetic body");'],
           ['status: "未設定",', 'status: "登録済み",'],
-          ['useState<HistoryRecord[]>([])', `useState<HistoryRecord[]>(${JSON.stringify([syntheticRecord])})`],
+          ['useState<HistoryRecord[]>([])', `useState<HistoryRecord[]>(${JSON.stringify([record])})`],
           ['useState<Record<string, XPublicationAttempt>>({})', `useState<Record<string, XPublicationAttempt>>(${JSON.stringify(attempt ? { post: attempt } : {})})`],
         ];
         if (confirmation) replacements.push(['useState<XPublishConfirmation | null>(null)', `useState<XPublishConfirmation | null>(${JSON.stringify({
@@ -139,7 +225,16 @@ function button(html, label) {
 test("real composer keeps reservation save separate from confirmed X-only original-media publish", async () => {
   const html = await renderConsole();
   assert.match(html, /予約を保存/);
-  assert.match(html, /SNSへの自動公開は準備中/);
+  assert.match(html, /通常の予約は内容を保存するだけで、SNSへ自動公開しません/);
+  assert.match(html, /Xへ予約時刻に自動公開する/);
+  assert.match(html, /X自動公開の実行基盤が未有効化/);
+  const readyHtml = await renderConsole({ scheduleReady: true });
+  assert.match(readyHtml, /X APIクレジットを消費/);
+  const unavailableStatusHtml = await renderConsole({
+    scheduleReady: true, scheduleStatusAvailable: false,
+  });
+  assert.match(unavailableStatusHtml, /X自動公開の予約状態を読み込めないため、自動公開は選べません/);
+  assert.match(unavailableStatusHtml, /type="checkbox"[^>]*disabled/);
   assert.match(html, /X加重文字数.*280/);
   assert.match(html, /費用が発生する可能性/);
   assert.match(html, /動画編集は反映しません/);
@@ -159,6 +254,54 @@ test("real history locks unknown/sending/published posts and resumes only prepar
   const preparing = await renderConsole({ view: "history", state: "preparing" });
   assert.match(preparing, /動画の処理状況を確認して投稿/);
   assert.doesNotMatch(preparing, />再予約<|>削除</);
+});
+
+test("calendar exposes queued X auto-publication status and locks ambiguous rows from unsafe direct cancellation", async () => {
+  const queued = await renderConsole({ view: "calendar", scheduledState: "queued" });
+  assert.match(queued, /X自動公開の予約中/);
+  assert.doesNotMatch(button(queued, "キャンセル"), /disabled/);
+  const queuedWhilePreparing = await renderConsole({
+    view: "calendar", scheduledState: "queued", attemptState: "preparing",
+  });
+  assert.doesNotMatch(button(queuedWhilePreparing, "キャンセル"), /disabled/);
+  for (const attemptState of ["claimed", "sending", "unknown"]) {
+    const inFlight = await renderConsole({ view: "calendar", scheduledState: "queued", attemptState });
+    assert.match(button(inFlight, "キャンセル"), /disabled/);
+  }
+  const unknown = await renderConsole({ view: "calendar", scheduledState: "unknown" });
+  assert.match(unknown, /X公開結果を要確認/);
+  assert.match(button(unknown, "キャンセル"), /disabled/);
+  const unavailable = await renderConsole({
+    view: "calendar", scheduledState: "queued", scheduleStatusAvailable: false,
+  });
+  assert.match(unavailable, /X自動公開状態を取得できません/);
+  assert.doesNotMatch(unavailable, /X自動公開の予約中/);
+  assert.match(button(unavailable, "キャンセル"), /disabled/);
+  const checkpointFailure = await renderConsole({
+    view: "calendar",
+    scheduledState: "failed",
+    scheduleErrorCode: "schedule_media_checkpoint_incomplete",
+    attemptState: "rejected",
+  });
+  assert.match(checkpointFailure, /自動再試行を停止しました/);
+  assert.match(checkpointFailure, /投稿リクエストは送信前/);
+  assert.doesNotMatch(button(checkpointFailure, "キャンセル"), /disabled/);
+  const ordinaryPreparing = await renderConsole({
+    view: "calendar", ordinaryScheduled: true, attemptState: "preparing",
+  });
+  assert.match(button(ordinaryPreparing, "キャンセル"), /disabled/);
+});
+
+test("cancelling an attachment-backed X schedule warns that uploaded media may remain until expiry", () => {
+  const warning = helpers.xScheduleCancelMediaWarning("queued", 1);
+  assert.match(warning, /既にXへアップロード.*有効期限まで残る可能性/);
+  assert.match(warning, /投稿本文の公開は止まります/);
+  assert.match(warning, /この画面から削除できません/);
+  assert.equal(helpers.xScheduleCancelMediaWarning("queued", 0), null);
+  assert.equal(helpers.xScheduleCancelMediaWarning("failed", 2), warning);
+  assert.equal(helpers.xScheduleCancelMediaWarning("unknown", 1), null);
+  assert.equal(helpers.xScheduleCancelMediaWarning("cancelled", 1), null);
+  assert.equal(helpers.xScheduleCancelMediaWarning("queued", -1), null);
 });
 test("confirmation shows frozen text, explicit X-only cost notice, and no automatic retry", async () => {
   const html = await renderConsole({ confirmation: true });
@@ -181,6 +324,48 @@ test("sending retains durable draft/files while video resumes reuse saved reques
   assert.match(consoleSource, /body: \{ action: "status", postId \}/);
   assert.match(consoleSource, /select\(xAttemptProjection\)/);
   assert.match(helpers.xPublishErrorMessage("media_permission_required"), /media\.write.*再連携/);
+});
+
+test("X scheduling saves first, enqueues only after related data, preserves ambiguous results, and uses RPC cancellation", async () => {
+  const code = await readFile(new URL("../app/social-console.tsx", import.meta.url), "utf8");
+  const scheduling = code.slice(code.indexOf("async function schedulePost()"), code.indexOf("async function rollbackFailedSchedule("));
+  assert.match(scheduling, /validateXScheduledPost/);
+  const failClosedGuard = scheduling.indexOf(
+    "if (autoPublishXScheduled && (!xScheduleStatusAvailable || !xScheduleReady))",
+  );
+  assert.notEqual(failClosedGuard, -1, "unreadable schedule status must reject X auto-publish submission");
+  assert.ok(failClosedGuard < scheduling.indexOf("const scheduledXValidation"));
+  assert.ok(failClosedGuard < scheduling.indexOf('body: { action: "preview", workspaceId }'));
+  assert.ok(failClosedGuard < scheduling.indexOf('rpc("social_x_schedule_enqueue"'));
+  assert.ok(
+    scheduling.indexOf('body: { action: "preview", workspaceId }') <
+      scheduling.indexOf("window.confirm("),
+    "the account preview must be read before exact-post consent",
+  );
+  assert.match(scheduling, /送信先: \$\{scheduledXConnection\?\.username/);
+  assert.match(scheduling, /scheduledXFilesSummary/);
+  assert.match(scheduling, /window\.confirm\(/);
+  assert.match(scheduling, /invoke\("social-x-publish"/);
+  assert.match(scheduling, /body:\s*\{\s*action:\s*"preview",\s*workspaceId\s*\}/);
+  assert.doesNotMatch(scheduling, /invoke\("social-x-oauth",\s*\{\s*body:\s*\{\s*action:\s*"preview"/);
+  assert.ok(scheduling.indexOf(".from\\(\"social_post_files\"\\)") < scheduling.indexOf('rpc("social_x_schedule_enqueue"'));
+  assert.match(scheduling, /p_post:\s*post\.id/);
+  assert.match(scheduling, /p_request:\s*requestId/);
+  assert.match(scheduling, /connectionFingerprint:\s*connection\.fingerprint/);
+  assert.match(scheduling, /sizeBytes:\s*attachment\.size,[\s\S]*sha256,/);
+  assert.match(scheduling, /if \(postId && !scheduleContentSaved\)/);
+  assert.match(scheduling, /xScheduleKnownEnqueueFailure\(enqueueError\)/);
+  assert.match(scheduling, /const uncertain = outcome === "pending" \|\| outcome === "unknown"/);
+  assert.match(code, /\.from\("social_x_scheduled_publications"\)[\s\S]*select\("post_id,state,error_code,scheduled_at"\)/);
+  const statusLoad = code.slice(code.indexOf("const xScheduleResult"), code.indexOf("const mediaJobByFileId"));
+  assert.match(statusLoad, /if \(!xScheduleResult\.error\)/);
+  assert.match(statusLoad, /for \(const postId of savedPostIds\) delete next\[postId\]/);
+  assert.match(code, /xScheduleResult\.error \? xScheduleLocalStates\[post\.id\] \?\? null : null/);
+  assert.match(code, /rpc\("social_x_schedule_cancel"/);
+  assert.match(code, /予約投稿は保存済みですが、X自動公開の登録結果を確認できません/);
+  const cancellation = code.slice(code.indexOf("async function cancelScheduledPost("),
+    code.indexOf("async function rescheduleDraftPost("));
+  assert.match(cancellation, /xScheduleCancelMediaWarning\(target\.xScheduleState \?\? "", target\.files\.length\)/);
 });
 
 test("confirmation snapshot transmits raw DB body, ordered file hashes and connection binding without live-state aliases", () => {

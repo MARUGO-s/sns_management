@@ -447,3 +447,12 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/social-x-publish/deno.json"
 entrypoint = "./functions/social-x-publish/index.ts"
+
+# Intentionally no Supabase Cron/job is configured here. The worker is dormant
+# unless an operator separately sets X_SCHEDULE_CRON_SECRET and invokes it from
+# an authenticated external scheduler.
+[functions.social-x-schedule-worker]
+enabled = true
+verify_jwt = false
+import_map = "./functions/social-x-schedule-worker/deno.json"
+entrypoint = "./functions/social-x-schedule-worker/index.ts"

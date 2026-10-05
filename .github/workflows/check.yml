@@ -26,9 +26,12 @@ jobs:
       - run: npm run test:x-oauth
       - run: npm run check:x-publish
       - run: npm run test:x-publish
+      - run: npm run check:x-schedule
+      - run: npm run test:x-schedule
       - run: npm test
       - run: npm run test:db
       - run: npm run test:db:oauth
       - run: npm run test:db:x-publish
+      - run: npm run test:db:x-schedule
       - run: npm run build:github-pages
       - run: test -f dist/client/index.html
