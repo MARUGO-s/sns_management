@@ -25,7 +25,10 @@
     "check:x-oauth": "deno check --config supabase/functions/social-x-oauth/deno.json supabase/functions/social-x-oauth/index.ts && deno check --config supabase/functions/social-x-oauth-callback/deno.json supabase/functions/social-x-oauth-callback/index.ts && deno check --config supabase/functions/social-integration-secrets/deno.json supabase/functions/social-integration-secrets/index.ts",
     "check:x-publish": "deno check --config supabase/functions/social-x-publish/deno.json supabase/functions/social-x-publish/index.ts",
     "test:x-publish": "deno test --no-config supabase/functions/_shared/x-publish-provider_test.ts supabase/functions/_shared/x-publish-handler_test.ts",
-    "test:db:x-publish": "node supabase/tests/social_x_publish_runner.mjs"
+    "test:db:x-publish": "node supabase/tests/social_x_publish_runner.mjs",
+    "test:x-schedule": "deno test --no-config supabase/functions/_shared/x-schedule-handler_test.ts",
+    "check:x-schedule": "deno check --config supabase/functions/social-x-schedule-worker/deno.json supabase/functions/social-x-schedule-worker/index.ts",
+    "test:db:x-schedule": "node supabase/tests/social_x_schedule_runner.mjs"
   },
   "dependencies": {
     "@heroui/react": "^3.2.2",

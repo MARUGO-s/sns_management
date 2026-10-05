@@ -1,5 +1,16 @@
 # Instatic TalksX 進行記録
 
+## 現在状態: X予約自動公開のローカル実装（未公開・実行停止）
+
+- 依頼: 利用者がX手動投稿に加えて予定投稿も希望し、継続を承認。対象は明示確認付きのXのみ。既存の手動投稿処理を再利用し、他SNSへは送らない。
+- 実装: `feat/x-scheduled-publishing`（開始時点のmain `eb50a8b`）にX専用キューmigration、private payloadとworkspace RLS、内容・添付・X接続世代の固定、enqueue/cancel/claim/finish RPC、秘密値で保護するWorker、UI表示・明示確認・キャンセル、競合テストとCI検査を追加。詳細は`docs/X_SCHEDULING.md`。
+- 安全停止: migrationのruntime markerは`enabled=false`、定期起動設定なし。Worker secretも未設定で、本番DB／Function／Cron／Pagesには何も反映していない。よって予約の自動公開は現時点で使えず、UIの自動公開準備状態も有効にならない。ローカル実装だけで公開済みとは扱わない。
+- 重複防止: 送信開始より前と証明できる一部失敗だけ同じrequest IDで再試行可能。X応答が不明、送信中lease期限切れ、永続receiptの不一致は`unknown`で停止し、自動再送しない。確実に未送信の予約だけキャンセル可能。
+- 検証: Deno導入後に`npm test` 53/53、予約Worker Denoテスト13/13と型検査、既存X publisher Denoテスト31/31と型検査、隔離PostgreSQLの権限・状態・独立接続競合（claim/cancel/enqueueおよびdispatch/stale-sweep NOWAIT競合）、`npx tsc --noEmit`、GitHub Pages buildが成功。Lintエラー0、既存React Hook警告1件。Graphifyは709 nodes / 999 edges / 59 communitiesで以前更新し、その時点の`knowledge:check`は成功したが、後続差分で生成物が古くなっており、最終確認には再生成・再検査が必要。手書きVaultノートは未変更。
+- レビュー・外部通信: 独立read-only再レビューで予約状態の読み取り失敗時に自動公開を止めるガード修正を確認し、新たなリリース阻害なし。これは本番実行・X受理の検証ではない。実X/API・Provider呼び出し、投稿、upload、token refresh、OAuth、課金変更、production DB/Functions/Auth/Cloud Run操作なし。差分は未commit／未pushで、PR・main merge・本番反映も行っていない。
+- 未決: 実行頻度と運用費用に関わるため、周期起動方式を確定していない。推奨はSupabase Cron、代替はGitHub Actions。利用者の「続けて」はローカル作業の承認として扱い、方式の明示選択・本番有効化の承認とは扱わない。公式資料: [Supabase scheduled Edge Functions](<https://supabase.com/docs/guides/functions/schedule-functions>)、[GitHub Actions workflow schedule](<https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax>)、[GitHub schedule delays](<https://docs.github.com/en/actions/how-tos/troubleshoot-workflows>)。
+- Git: 差分は未commit／未push、PR・CI・main mergeなし。通常のPR経路でCIを通す前にDeno結果を確認し、実行方式と有効化条件を別途決める。本番有効化前に、その時点で投稿対象となり得る予約を利用者へ明示する。
+
 ## 2026-10-04 20:44 JST メディア用権限設定保存済み・未接続（現在の接続状態）
 
 - 利用者の20:37:55 JSTの別承認後、専任ブラウザ担当が20:43:03 JSTに`tweet.read tweet.write users.read offline.access media.write`を保存し、「保存しました」を確認。固定Callbackと認証情報は維持、秘密情報欄は空。設定変更は旧接続を無効化するため、20:37 JSTに確認した4スコープ接続を現在も接続済みと扱わない。

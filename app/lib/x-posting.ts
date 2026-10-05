@@ -21,6 +21,7 @@ export type XPublishResult = {
   nextCheckAt?: string;
 };
 export type XMediaInput = { id: string; name: string; type: string; size: number };
+export type XScheduleMediaInput = XMediaInput & { hasCrop?: boolean };
 export type XExpectedFile = {
   id: string;
   storagePath: string;
@@ -38,6 +39,12 @@ export const xAttemptProjection =
   "id,post_id,workspace_id,request_id,state,remote_post_id,error_code,created_at,updated_at";
 export const xImageLimit = 5 * 1024 * 1024;
 export const xVideoLimit = 20 * 1024 * 1024;
+const xScheduleStates = new Set(["queued", "claimed", "sending", "published", "failed", "cancelled", "unknown"]);
+const xScheduleEnqueueErrors = new Set([
+  "schedule_not_ready", "schedule_cancelled", "schedule_exists", "invalid_request", "invalid_text",
+  "forbidden", "stale_snapshot", "unsupported_media", "media_too_large",
+  "publication_locked", "not_connected", "media_permission_required",
+]);
 const states: XPublicationState[] = ["preparing", "sending", "published", "rejected", "unknown"];
 // Keep in sync with the Function's public error projection. The proof flag is
 // issued only for a known rollback of its initial preparation transaction.
@@ -47,7 +54,7 @@ const xPublicFailureCodes = new Set([
   "media_expired", "storage_failed", "invalid_text", "media_too_large",
   "invalid_media", "media_failed", "provider_unavailable", "authorization_failed",
   "invalid_token", "rate_limited", "provider_rejected", "unknown_result",
-  "invalid_state", "media_permission_required",
+  "invalid_state", "media_permission_required", "schedule_not_ready", "schedule_cancelled",
 ]);
 
 export function validateXPost(text: string, files: XMediaInput[]) {
@@ -67,6 +74,104 @@ export function validateXPost(text: string, files: XMediaInput[]) {
     error = "Xの動画は1本のみです。画像や別の動画と同時には送れません。";
   }
   return { text: normalizedText, weightedLength: parsed.weightedLength, valid: !error, error };
+}
+
+/** Opt-in scheduled publication is strictly X-only and always sends untouched originals. */
+export function validateXScheduledPost(input: {
+  channels: string[];
+  text: string;
+  files: XScheduleMediaInput[];
+  connected: boolean;
+  canPublish: boolean;
+  mediaWrite: boolean;
+}) {
+  const validation = validateXPost(input.text, input.files);
+  if (input.channels.length !== 1 || input.channels[0] !== "x") {
+    return { ...validation, valid: false, error: "Xの自動公開予約は投稿先をXだけにしてください。" };
+  }
+  if (!input.canPublish) return { ...validation, valid: false, error: "この利用者にはX投稿権限がありません。" };
+  if (!input.connected) return { ...validation, valid: false, error: "Xの接続を確認してから自動公開を予約してください。" };
+  if (!validation.valid) return validation;
+  if (input.files.some((file) => file.hasCrop)) {
+    return { ...validation, valid: false, error: "自動公開予約では動画編集を使えません。元ファイルを添付してください。" };
+  }
+  if (input.files.length && !input.mediaWrite) {
+    return { ...validation, valid: false, error: "画像・動画の自動公開にはXのmedia.write権限が必要です。" };
+  }
+  return validation;
+}
+
+export function parseXScheduledPublication(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  if (typeof row.post_id !== "string" || !/^[0-9a-f-]{36}$/i.test(row.post_id) ||
+      typeof row.state !== "string" || !/^[a-z][a-z0-9_]{0,31}$/.test(row.state) ||
+      (row.error_code !== null && typeof row.error_code !== "string") ||
+      (row.scheduled_at !== null && (typeof row.scheduled_at !== "string" || !Number.isFinite(Date.parse(row.scheduled_at))))) return null;
+  return {
+    postId: row.post_id,
+    // Unknown future states fail closed: display as unresolved and never permit
+    // the ordinary direct-update cancellation path.
+    state: xScheduleStates.has(row.state) ? row.state : "unknown",
+    errorCode: typeof row.error_code === "string" && /^[a-z0-9_]{1,64}$/.test(row.error_code) ? row.error_code : null,
+    scheduledAt: typeof row.scheduled_at === "string" ? row.scheduled_at : null,
+  };
+}
+
+/** Only a definitive PostgreSQL exception proves that enqueue rolled back. */
+export function xScheduleKnownEnqueueFailure(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  return row.code === "P0001" && typeof row.message === "string" &&
+      xScheduleEnqueueErrors.has(row.message)
+    ? row.message
+    : null;
+}
+
+export function xScheduleStateLabel(state: string) {
+  const labels: Record<string, string> = {
+    queued: "X自動公開の予約中",
+    claimed: "X公開処理を準備中",
+    sending: "X公開中",
+    published: "X公開済み",
+    failed: "X自動公開に失敗",
+    cancelled: "X自動公開をキャンセル",
+    unknown: "X公開結果を要確認",
+  };
+  return labels[state] ?? "X自動公開状態を確認";
+}
+
+export function xScheduleErrorMessage(errorCode: string | null | undefined) {
+  if (!errorCode) return null;
+  const messages: Record<string, string> = {
+    invalid_text: "Xの予約には本文が必要です。本文を入力してから、もう一度予約してください。",
+    schedule_not_ready: "X自動公開の実行基盤が停止中です。予約は登録されていません。",
+    schedule_cancelled: "この予約はキャンセル済みです。再投稿する場合は新しい送信操作を開始してください。",
+    schedule_media_checkpoint_incomplete:
+      "添付のXアップロード結果を一部確認できず、自動再試行を停止しました。Xへの投稿リクエストは送信前ですが、添付メディアがX側に作成されている可能性があります。予約をキャンセルし、X側を確認してから再予約してください。",
+    schedule_attempt_limit:
+      "自動公開の確認回数上限に達したため停止しました。Xへの投稿リクエストは送信前ですが、添付メディアがX側に作成されている可能性があります。状態を確認してから予約をキャンセル・再予約してください。",
+  };
+  return messages[errorCode] ?? "X自動公開でエラーが発生しました。状態を確認してください。";
+}
+
+/** Cancellation is safe only while no provider create request can be in flight. */
+export function xScheduleCanCancel(
+  scheduleState: string,
+  attempt?: XPublicationAttempt | null,
+) {
+  if (scheduleState === "queued") {
+    return !attempt || attempt.state === "preparing" || attempt.state === "rejected";
+  }
+  if (scheduleState === "failed") return !attempt || attempt.state === "rejected";
+  return false;
+}
+
+/** Scheduled cancellation stops the post request but cannot delete uploaded X media. */
+export function xScheduleCancelMediaWarning(scheduleState: string, mediaCount: number) {
+  if (!["queued", "failed"].includes(scheduleState) ||
+      !Number.isSafeInteger(mediaCount) || mediaCount <= 0) return null;
+  return "添付メディアが既にXへアップロードされている場合、予約をキャンセルしてもX側に有効期限まで残る可能性があります。投稿本文の公開は止まりますが、X側のメディアはこの画面から削除できません。";
 }
 
 export function xAttemptLocksPost(attempt?: XPublicationAttempt | null) {
@@ -197,6 +302,8 @@ export function xPublishErrorMessage(code: unknown) {
     confirmation_changed: "確認した本文・ファイル・接続先が変更されました。内容をもう一度確認してください。",
     busy: "別の投稿操作を確認中です。再送せず保存状態を確認してください。",
     not_configured: "Xの接続設定を確認してください。",
+    schedule_not_ready: "X自動公開の実行基盤が停止中です。予約状態を確認してください。",
+    schedule_cancelled: "この予約はキャンセル済みです。状態を確認してください。",
     request_conflict: "送信済みの内容と異なります。履歴の保存状態を確認してください。",
   };
   return typeof code === "string" && Object.hasOwn(messages, code)

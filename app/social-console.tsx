@@ -63,6 +63,9 @@ import { ChannelLogo, type ChannelId } from "./channel-logo";
 import { filterPosts, scheduledPosts, type PostFilter, type PostStatus } from "./lib/post-list";
 import {
   freezeXMediaFile, parseXConnectionPreview, parseXNotStartedFailure, parseXPublishResult, reconcileXAttempts,
+  parseXScheduledPublication, validateXScheduledPost, xScheduleCanCancel, xScheduleCancelMediaWarning,
+  xScheduleErrorMessage,
+  xScheduleKnownEnqueueFailure, xScheduleStateLabel,
   removeXOptimisticAttempt, removeXPendingRequest,
   validateXPost, xAttemptLocksPost, xAttemptProjection, xMediaDigest,
   xPostLink, xPublishBody, xPublishErrorMessage, xPublishMessage, xPublishStateLabel,
@@ -246,6 +249,8 @@ type HistoryRecord = {
   format: string;
   savedAt: string;
   files: SavedFile[];
+  xScheduleState?: string | null;
+  xScheduleErrorCode?: string | null;
 };
 
 type XPublishConfirmation = {
@@ -428,6 +433,7 @@ export default function SocialConsole() {
   const [selectedChannels, setSelectedChannels] = useState<ChannelId[]>([]);
   const [postText, setPostText] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
+  const [autoPublishXScheduled, setAutoPublishXScheduled] = useState(false);
   const [history, setHistory] = useState<HistoryRecord[]>([]);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<LocalAttachment[]>([]);
@@ -461,6 +467,9 @@ export default function SocialConsole() {
   const [canPublishX, setCanPublishX] = useState(false);
   const [xAttempts, setXAttempts] = useState<Record<string, XPublicationAttempt>>({});
   const [xAttemptsLoaded, setXAttemptsLoaded] = useState(false);
+  const [xScheduleStatusAvailable, setXScheduleStatusAvailable] = useState(false);
+  const [xScheduleReady, setXScheduleReady] = useState(false);
+  const [xScheduleLocalStates, setXScheduleLocalStates] = useState<Record<string, string>>({});
   const [xNextChecks, setXNextChecks] = useState<Record<string, string>>({});
   const [xCheckTime, setXCheckTime] = useState(0);
   const [xPublishingId, setXPublishingId] = useState<string | null>(null);
@@ -482,6 +491,9 @@ export default function SocialConsole() {
   const [savingPost, setSavingPost] = useState(false);
   const [savingIntegration, setSavingIntegration] = useState(false);
   const [xOAuthServer, setXOAuthServer] = useState<"unknown" | "checking" | "ready" | "unavailable">("unknown");
+  const xScheduleConnectionReady = canPublishX &&
+    integrations.x.status === "登録済み" && xOAuthServer === "ready";
+  const xAutoPublishReady = xScheduleStatusAvailable && xScheduleReady && xScheduleConnectionReady;
   const [pendingXCallback, setPendingXCallback] = useState<XOAuthCallback | null>(() =>
     typeof window === "undefined" ? null : parseXOAuthCallback(window.location.href).callback,
   );
@@ -585,6 +597,10 @@ export default function SocialConsole() {
         setCanPublishX(false);
         setXAttempts({});
         setXAttemptsLoaded(false);
+        setXScheduleStatusAvailable(false);
+        setAutoPublishXScheduled(false);
+        setXScheduleReady(false);
+        setXScheduleLocalStates({});
         setXConfirmation(null);
         setCurrentStore(null);
         setStoreSelectionRequired(false);
@@ -607,6 +623,10 @@ export default function SocialConsole() {
         setCanPublishX(false);
         setXAttempts({});
         setXAttemptsLoaded(false);
+        setXScheduleStatusAvailable(false);
+        setAutoPublishXScheduled(false);
+        setXScheduleReady(false);
+        setXScheduleLocalStates({});
         setXConfirmation(null);
         setCurrentStore(null);
         setStoreSelectionRequired(false);
@@ -1123,6 +1143,9 @@ export default function SocialConsole() {
       if (!candidateStoreId) {
         setWorkspaceId(null);
         setCurrentStore(null);
+        setXScheduleStatusAvailable(false);
+        setAutoPublishXScheduled(false);
+        setXScheduleReady(false);
         setStoreSelectionRequired(true);
         setHistory([]);
         setIntegrations(createDefaultIntegrations());
@@ -1238,6 +1261,35 @@ export default function SocialConsole() {
       if (integrationsResult.error) throw integrationsResult.error;
       if (mediaJobsResult.error) throw mediaJobsResult.error;
 
+      const { data: xScheduleReadyData, error: xScheduleReadyError } = await supabase.rpc(
+        "social_x_schedule_is_ready",
+        { p_workspace: activeWorkspace.id },
+      );
+      setXScheduleReady(!xScheduleReadyError && xScheduleReadyData === true);
+
+      const savedPostIds = ((postsResult.data ?? []) as unknown as DbPostRow[])
+        .map((post) => post.id);
+      const xScheduleResult = savedPostIds.length
+        ? await supabase.from("social_x_scheduled_publications")
+          .select("post_id,state,error_code,scheduled_at")
+          .in("post_id", savedPostIds)
+        : { data: [], error: null };
+      setXScheduleStatusAvailable(!xScheduleResult.error);
+      if (xScheduleResult.error) setAutoPublishXScheduled(false);
+      const schedulesByPostId = new Map<string, NonNullable<ReturnType<typeof parseXScheduledPublication>>>();
+      for (const row of xScheduleResult.data ?? []) {
+        const parsed = parseXScheduledPublication(row);
+        if (parsed) schedulesByPostId.set(parsed.postId, parsed);
+      }
+      if (!xScheduleResult.error) {
+        setXScheduleLocalStates((current) => {
+          const next = { ...current };
+          // A successful query is authoritative even when a post has no queue row.
+          for (const postId of savedPostIds) delete next[postId];
+          return next;
+        });
+      }
+
       const mediaJobByFileId = new Map<string, MediaJobRow>();
       for (const job of (mediaJobsResult.data ?? []) as MediaJobRow[]) {
         mediaJobByFileId.set(job.source_file_id, job);
@@ -1258,6 +1310,9 @@ export default function SocialConsole() {
           owner: post.owner_name || currentUser.email || "担当者",
           format: post.format,
           savedAt: formatDateTime(post.created_at),
+          xScheduleState: schedulesByPostId.get(post.id)?.state ??
+            (xScheduleResult.error ? xScheduleLocalStates[post.id] ?? null : null),
+          xScheduleErrorCode: schedulesByPostId.get(post.id)?.errorCode ?? null,
           files: [...(post.social_post_files ?? [])].sort((a, b) =>
             a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id),
           ).map((file) => ({
@@ -1496,6 +1551,7 @@ export default function SocialConsole() {
 
   function toggleChannel(id: ChannelId) {
     if (xPublishBusy.current || xConfirmation) return;
+    setAutoPublishXScheduled(false);
     setSelectedChannels((current) =>
       current.includes(id)
         ? current.filter((channelId) => channelId !== id)
@@ -1586,16 +1642,82 @@ export default function SocialConsole() {
       return;
     }
 
+    if (autoPublishXScheduled && (!xScheduleStatusAvailable || !xScheduleReady)) {
+      setNotice({
+        tone: "info",
+        text: !xScheduleStatusAvailable
+          ? "X自動公開の予約状態を読み込めません。安全のため自動公開予約は中止しました。通常の予約保存は利用できます。"
+          : "X自動公開の実行基盤はまだ有効化されていないか、状態を確認できません。通常の予約保存のみ利用できます。",
+      });
+      return;
+    }
+
+    const scheduledXValidation = validateXScheduledPost({
+      channels: selectedChannels,
+      text: postText,
+      files: attachedFiles.map((file) => ({
+        id: file.id, name: file.name, type: file.type, size: file.size, hasCrop: Boolean(file.crop),
+      })),
+      connected: integrations.x.status === "登録済み" && xOAuthServer === "ready",
+      canPublish: canPublishX,
+      mediaWrite: integrations.x.scopes.split(/[,\s]+/).includes("media.write"),
+    });
+    if (autoPublishXScheduled && !scheduledXValidation.valid) {
+      setNotice({ tone: "error", text: scheduledXValidation.error });
+      return;
+    }
+    let scheduledXConnection: ReturnType<typeof parseXConnectionPreview> = null;
+    if (autoPublishXScheduled) {
+      xPublishBusy.current = true;
+      setXPublishingId("schedule-preview");
+      try {
+        // This endpoint reads the current DB connection binding only; it does
+        // not refresh credentials or contact X. Bind consent to this snapshot.
+        const { data, error } = await supabase.functions.invoke("social-x-publish", {
+          body: { action: "preview", workspaceId },
+        });
+        scheduledXConnection = !error ? parseXConnectionPreview(data) : null;
+        if (!scheduledXConnection) {
+          setNotice({
+            tone: "error",
+            text: "対象のXアカウントを確認できません。予約を保存する前に接続状態を再確認してください。",
+          });
+          return;
+        }
+      } catch {
+        setNotice({
+          tone: "error",
+          text: "対象のXアカウントを確認できません。予約を保存する前に接続状態を再確認してください。",
+        });
+        return;
+      } finally {
+        xPublishBusy.current = false;
+        setXPublishingId(null);
+      }
+    }
+    const scheduledXFilesSummary = attachedFiles.length
+      ? attachedFiles.map((file) => `${file.name} / ${formatFileSize(file.size)} / ${file.type}`).join("\n")
+      : "添付なし";
+    if (autoPublishXScheduled && !window.confirm(
+      `次の予約をXだけに自動公開します。\n\n送信先: ${scheduledXConnection?.username ? `@${scheduledXConnection.username}` : "現在接続中のXアカウント"}\n予定: ${formatDateTime(scheduledAt)}\n添付:\n${scheduledXFilesSummary}\n本文: ${scheduledXValidation.text}\n\nX APIクレジットを消費し、費用が発生する可能性があります。予約時刻までに接続・権限・メディア条件が変わった場合、公開されないことがあります。実際のX公開を許可しますか？`,
+    )) return;
+
     setSavingPost(true);
     setNotice(null);
     let postId: string | null = null;
+    let scheduleContentSaved = false;
+    let scheduleEnqueueOutcome: "not_attempted" | "pending" | "queued" | "rejected" | "unknown" = "not_attempted";
     const uploadedStoragePaths: string[] = [];
+    const expectedXFiles: XExpectedFile[] = [];
     let mediaJobCount = 0;
     let cloudRunConnected = true;
+    let xScheduleWarning = "";
+    let xScheduleUiState: string | null = null;
 
     try {
+      const savedBody = autoPublishXScheduled ? scheduledXValidation.text : postText.trim();
       const title =
-        postText.trim().replace(/\s+/g, " ").slice(0, 48) ||
+        savedBody.replace(/\s+/g, " ").slice(0, 48) ||
         "予約投稿";
       const format = selectedChannels.includes("tiktok")
         ? "Short / Reel"
@@ -1606,7 +1728,7 @@ export default function SocialConsole() {
         .insert({
           workspace_id: workspaceId,
           title,
-          body: postText.trim(),
+          body: savedBody,
           scheduled_at: new Date(scheduledAt).toISOString(),
           status: "scheduled",
           owner_name: user.email ?? "担当者",
@@ -1655,6 +1777,16 @@ export default function SocialConsole() {
           .select("id")
           .single();
         if (fileError) throw fileError;
+        if (autoPublishXScheduled) {
+          const { sha256 } = await xMediaDigest(attachment.file, attachment.size);
+          expectedXFiles.push({
+            id: savedFile.id,
+            storagePath,
+            mimeType: attachment.type,
+            sizeBytes: attachment.size,
+            sha256,
+          });
+        }
 
         if (attachment.type.startsWith("video/") && attachment.crop) {
           const { data: mediaJob, error: mediaJobError } = await supabase
@@ -1683,26 +1815,119 @@ export default function SocialConsole() {
         }
       }
 
+      // From here on the saved post is durable. A schedule RPC failure must
+      // never roll back the post or its uploads, because its result may be
+      // uncertain and deleting them could race a committed queue entry.
+      scheduleContentSaved = true;
+
+      if (autoPublishXScheduled) {
+        // Bind the queue entry to the currently authorized X connection just as
+        // manual publication binds its immutable confirmation snapshot.
+        const connection = scheduledXConnection;
+        if (!connection) {
+          xScheduleWarning = "投稿と添付は保存しましたが、X接続の再確認ができず自動公開予約は登録していません。予約一覧で状態を確認してください。";
+        } else {
+          const requestId = crypto.randomUUID();
+          scheduleEnqueueOutcome = "pending";
+          const { data: queued, error: enqueueError } = await supabase.rpc("social_x_schedule_enqueue", {
+            p_post: post.id,
+            p_request: requestId,
+            p_expected: {
+              body: savedBody,
+              files: expectedXFiles,
+              connectionFingerprint: connection.fingerprint,
+            },
+          });
+          if (enqueueError) {
+            const knownFailure = xScheduleKnownEnqueueFailure(enqueueError);
+            if (knownFailure) {
+              // PostgreSQL raised a whitelisted P0001 error, proving the
+              // enqueue transaction rolled back. Do not label this unknown.
+              scheduleEnqueueOutcome = "rejected";
+              xScheduleWarning = knownFailure === "schedule_not_ready"
+                ? "予約投稿は保存しましたが、X自動公開の実行基盤が未有効のため自動公開予約は登録されていません。"
+                : "予約投稿は保存しましたが、X自動公開予約は登録されていません。予約投稿の状態を確認してください。";
+            } else {
+              // A transport/server error may hide a committed transaction.
+              // Preserve the post and prohibit automatic retries.
+              scheduleEnqueueOutcome = "unknown";
+              xScheduleWarning = "予約投稿は保存済みですが、X自動公開の登録結果を確認できません。重複登録を避けるため再操作せず、予約一覧の状態を確認してください。";
+              xScheduleUiState = "unknown";
+            }
+          } else if (queued?.state !== "queued" || typeof queued?.scheduledAt !== "string" ||
+              !Number.isFinite(Date.parse(queued.scheduledAt))) {
+            scheduleEnqueueOutcome = "unknown";
+            xScheduleWarning = "予約投稿は保存済みですが、X自動公開の登録結果を確認できません。予約一覧の状態を確認してください。";
+            xScheduleUiState = "unknown";
+          } else {
+            scheduleEnqueueOutcome = "queued";
+            xScheduleUiState = "queued";
+          }
+        }
+      }
+
       for (const attachment of attachedFiles) {
         if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
       }
       setPostText("");
       setScheduledAt("");
+      setAutoPublishXScheduled(false);
       setAttachedFiles([]);
       setNotice({
-        tone: cloudRunConnected ? "success" : "info",
-        text:
+        tone: xScheduleWarning ? "info" : cloudRunConnected ? "success" : "info",
+        text: xScheduleWarning || (
           mediaJobCount === 0
             ? "予約投稿と添付ファイルをSupabaseへ保存しました。"
             : cloudRunConnected
               ? `予約投稿を保存し、動画処理${mediaJobCount}件を開始しました。`
-              : `予約投稿を保存し、動画処理${mediaJobCount}件をキューへ登録しました。Cloud Run接続後に処理されます。`,
+              : `予約投稿を保存し、動画処理${mediaJobCount}件をキューへ登録しました。Cloud Run接続後に処理されます。`),
       });
+      if (autoPublishXScheduled && postId && xScheduleUiState) {
+        setXScheduleLocalStates((current) => ({ ...current, [postId!]: xScheduleUiState! }));
+      }
       await loadWorkspaceData(user);
+      if (autoPublishXScheduled && postId && xScheduleUiState) {
+        const savedPostId = postId;
+        setHistory((current) => current.map((record) => record.id === savedPostId
+          ? { ...record, xScheduleState: xScheduleUiState }
+          : record));
+      }
       setActiveView("calendar");
     } catch (error) {
-      if (postId) {
+      if (postId && !scheduleContentSaved) {
         await rollbackFailedSchedule(postId, uploadedStoragePaths);
+      }
+      if (scheduleContentSaved && postId) {
+        const outcome = scheduleEnqueueOutcome;
+        const uncertain = outcome === "pending" || outcome === "unknown";
+        const visibleState = uncertain ? "unknown" : outcome === "queued" ? "queued" : null;
+        const message = uncertain
+          ? "予約投稿は保存済みですが、X自動公開の登録結果を確認できません。重複登録を避けるため再操作せず、予約一覧の状態を確認してください。"
+          : outcome === "queued"
+            ? "予約投稿とX自動公開予約は登録済みですが、一覧を再読み込みできませんでした。予約一覧を再読み込みして状態を確認してください。"
+            : autoPublishXScheduled
+              ? "予約投稿は保存済みですが、X自動公開予約は登録されていません。予約一覧で状態を確認してください。"
+              : "予約投稿は保存済みですが、一覧を再読み込みできませんでした。予約一覧を再読み込みしてください。";
+        if (visibleState) {
+          setXScheduleLocalStates((current) => ({ ...current, [postId!]: visibleState }));
+        }
+        setNotice({ tone: "info", text: message });
+        if (user) {
+          try {
+            await loadWorkspaceData(user);
+          } catch {
+            // The saved content and queue outcome remain authoritative.
+          }
+          const savedPostId = postId;
+          if (visibleState) {
+            setHistory((current) => current.map((record) => record.id === savedPostId
+              ? { ...record, xScheduleState: visibleState }
+              : record));
+          }
+          setNotice({ tone: "info", text: message });
+          setActiveView("calendar");
+        }
+        return;
       }
       setNotice({
         tone: "error",
@@ -1735,14 +1960,51 @@ export default function SocialConsole() {
 
   async function cancelScheduledPost(postId: string) {
     if (!supabase || !user) return;
-    if (!xAttemptsLoaded || xAttemptLocksPost(xAttempts[postId]) || xPublishingId) return;
+    if (!xAttemptsLoaded || xPublishingId) return;
     const target = history.find((record) => record.id === postId);
     if (!target || target.status !== "予約済み") return;
-    if (!window.confirm("この予約投稿をキャンセルして下書きに戻しますか？")) {
+    const hasAutoXSchedule = Boolean(target.xScheduleState);
+    const scheduleAttempt = xAttempts[postId];
+    if (hasAutoXSchedule && !xScheduleCanCancel(target.xScheduleState ?? "", scheduleAttempt)) {
+      setNotice({ tone: "info", text: "X自動公開の処理中または結果確認中です。外部公開の有無を確認できるまでキャンセルできません。" });
+      return;
+    }
+    if (!hasAutoXSchedule && xAttemptLocksPost(scheduleAttempt)) return;
+    let confirmation = hasAutoXSchedule
+      ? target.xScheduleState === "failed"
+        ? "確定した失敗を解除し、投稿を下書きに戻しますか？不明な公開結果はキャンセルできません。"
+        : "Xへの自動公開予約をキャンセルしますか？投稿は下書きに戻ります。"
+      : "この予約投稿をキャンセルして下書きに戻しますか？";
+    const mediaWarning = hasAutoXSchedule
+      ? xScheduleCancelMediaWarning(target.xScheduleState ?? "", target.files.length)
+      : null;
+    if (mediaWarning) confirmation += `\n\n${mediaWarning}`;
+    if (!window.confirm(confirmation)) {
       return;
     }
 
     setNotice(null);
+    if (hasAutoXSchedule) {
+      const { data: cancelled, error: cancelError } = await supabase.rpc("social_x_schedule_cancel", {
+        p_post: postId,
+      });
+      if (cancelError || cancelled?.state !== "cancelled") {
+        setXScheduleLocalStates((current) => ({ ...current, [postId]: "unknown" }));
+        setHistory((current) => current.map((record) => record.id === postId
+          ? { ...record, xScheduleState: "unknown" }
+          : record));
+        setNotice({
+          tone: "error",
+          text: "X自動公開予約のキャンセル結果を確認できません。重複操作を避け、予約一覧の状態を再読み込みしてください。",
+        });
+        return;
+      }
+      setXScheduleLocalStates((current) => ({ ...current, [postId]: "cancelled" }));
+      setNotice({ tone: "success", text: "X自動公開予約をキャンセルしました。" });
+      await loadWorkspaceData(user);
+      return;
+    }
+
     const { data: updatedPost, error } = await supabase
       .from("social_posts")
       .update({
@@ -2833,7 +3095,36 @@ export default function SocialConsole() {
                   <span>{savingPost ? "保存しています…" : "予約を保存"}</span>
                 </Button>
               </div>
-              <p className="publishing-note"><AlertCircle size={15} aria-hidden="true" />予約内容を保存します。SNSへの自動公開は準備中です。</p>
+              {selectedChannels.length === 1 && selectedChannels[0] === "x" && (
+                <div className="x-publication-panel" aria-label="X自動公開予約">
+                  <label className="field-label">
+                    <input
+                      type="checkbox"
+                      checked={autoPublishXScheduled}
+                      disabled={savingPost || Boolean(xPublishingId) || !xAutoPublishReady}
+                      onChange={(event) => setAutoPublishXScheduled(event.target.checked)}
+                    />
+                    Xへ予約時刻に自動公開する
+                  </label>
+                  {!xScheduleStatusAvailable
+                    ? <p role="status">X自動公開の予約状態を読み込めないため、自動公開は選べません。通常の予約は内容保存のみで、自動公開されません。</p>
+                    : !xScheduleReady
+                    ? <p role="status">X自動公開の実行基盤が未有効化、または状態を確認できません。通常の予約は内容保存のみで、自動公開されません。</p>
+                    : !xScheduleConnectionReady
+                    ? <p role="status">X接続と投稿権限を確認できないため、自動公開予約は選べません。通常の予約保存はできます。</p>
+                    : <p>通常は予約内容を保存するだけです。この項目を選ぶと、指定時刻にXへ公開します。X APIクレジットを消費し、費用が発生する可能性があります。予約確定前に確認画面が表示されます。</p>}
+                  {autoPublishXScheduled && (
+                    <p className="x-publication-warning" role="status">
+                      Xのみが対象です。本文は加重280文字以内、画像は元のJPEG/PNG最大4枚（各5MiB）、または元のMP4動画1本（20MiB）に限ります。動画編集・他SNSとの同時予約は使えません。
+                    </p>
+                  )}
+                </div>
+              )}
+              <p className="publishing-note"><AlertCircle size={15} aria-hidden="true" />
+                {autoPublishXScheduled
+                  ? "自動公開の予約は、X接続状況と対象内容を確認した後に登録します。"
+                  : "通常の予約は内容を保存するだけで、SNSへ自動公開しません。"}
+              </p>
               <section className="x-publication-panel" aria-label="Xへの手動投稿">
                 <h4><ChannelLogo channel="x" small />Xへ今すぐ投稿</h4>
                 <p>文章と元のJPEG・PNG画像（4枚まで・各5MiB）、または元のMP4動画（1本・20MiB）を送信します。動画編集は反映しません。</p>
@@ -2920,13 +3211,30 @@ export default function SocialConsole() {
                             </span>
                           ))}
                         </div>
+                        {post.channels.includes("x") && (
+                          <p className="publishing-note">
+                            {post.channels.length === 1 && !xScheduleStatusAvailable
+                              ? "X自動公開状態を取得できません。自動公開の有無は不明です。再読み込みして確認してください。"
+                              : post.xScheduleState
+                              ? xScheduleStateLabel(post.xScheduleState)
+                              : "保存のみ（SNSへの自動公開なし）"}
+                            {post.xScheduleErrorCode
+                              ? `。${xScheduleErrorMessage(post.xScheduleErrorCode)}`
+                              : ""}
+                          </p>
+                        )}
                       </div>
                       <div className="queue-actions">
                         <span className="status-pill ready">{post.status}</span>
                         <button
                           className="queue-cancel-button"
                           type="button"
-                          disabled={!xAttemptsLoaded || xAttemptLocksPost(xAttempts[post.id]) || Boolean(xPublishingId)}
+                          disabled={!xAttemptsLoaded ||
+                            (post.channels.length === 1 && post.channels[0] === "x" && !xScheduleStatusAvailable) ||
+                            (post.xScheduleState
+                              ? !xScheduleCanCancel(post.xScheduleState, xAttempts[post.id])
+                              : xAttemptLocksPost(xAttempts[post.id])) ||
+                            Boolean(xPublishingId)}
                           onClick={() => void cancelScheduledPost(post.id)}
                           aria-label={`${post.title}の予約をキャンセル`}
                         >
@@ -2967,7 +3275,7 @@ export default function SocialConsole() {
               </div>
               <div className="approval-step current">
                 <AlertCircle aria-hidden="true" size={17} />
-                <span>SNSへの自動公開は準備中です</span>
+                <span>通常予約は保存のみ。Xだけを選び、明示的に有効化した予約は自動公開します</span>
               </div>
             </aside>
           </section>
@@ -3105,7 +3413,17 @@ export default function SocialConsole() {
                           保存状態を確認（X APIへの通信なし）
                         </button>
                       </div>
-                      <p>手動投稿はXのみです。予約の自動実行は行いません。</p>
+                      <p>即時公開は内容確認後の手動操作です。予約は通常保存のみで、Xだけを選んで自動公開を明示したものだけ実行対象です。</p>
+                      {selectedHistory.channels.length === 1 && selectedHistory.channels[0] === "x" &&
+                        selectedHistory.status === "予約済み" && (
+                          <p role="status">
+                            {selectedHistory.xScheduleState
+                              ? xScheduleStateLabel(selectedHistory.xScheduleState)
+                              : xScheduleStatusAvailable
+                                ? "通常の保存予約（Xへの自動公開なし）"
+                                : "X自動公開状態を読み込めません。キャンセル・再操作は保留してください。"}
+                          </p>
+                        )}
                     </section>
                   )}
                   {!xAttemptLocksPost(xAttempts[selectedHistory.id]) && (selectedHistory.status === "下書き" ||

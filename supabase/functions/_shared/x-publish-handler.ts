@@ -87,7 +87,7 @@ export const PUBLICATION_ERRORS = new Set([
   "invalid_media", "media_failed", "provider_unavailable", "authorization_failed",
   "invalid_token", "rate_limited", "provider_rejected", "unknown_result",
   "invalid_state",
-  "media_permission_required",
+  "media_permission_required", "schedule_not_ready", "schedule_cancelled",
 ]);
 export function publicationErrorCode(error: unknown): string {
   const code = (error as { code?: unknown })?.code;
